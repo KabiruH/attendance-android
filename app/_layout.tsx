@@ -1,38 +1,48 @@
-// app/_layout.tsx (Root Layout)
-import { Slot, SplashScreen } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { StorageService } from '../services/StorageService';
 
-// Prevent the splash screen from auto-hiding
-SplashScreen.preventAutoHideAsync();
+// // app/_layout.tsx - Root Layout (Main App Entry Point)
+// import { useEffect, useState } from 'react';
+// import { Slot, SplashScreen, router } from 'expo-router';
+// import { StorageService } from '../services/StorageService';
 
-export default function RootLayout() {
-  const [isReady, setIsReady] = useState(false);
+// // Prevent the splash screen from auto-hiding
+// SplashScreen.preventAutoHideAsync();
 
-  useEffect(() => {
-    async function prepare() {
-      try {
-        // Pre-load any data you need here
-        // For example, check authentication status
-        await StorageService.getUserToken();
+// export default function RootLayout() {
+//   const [isReady, setIsReady] = useState(false);
+
+//   useEffect(() => {
+//     async function prepare() {
+//       try {
+//         // Check authentication status
+//         const token = await StorageService.getUserToken();
+//         const userData = await StorageService.getUserData();
         
-        // Simulate loading time (remove in production)
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      } catch (e) {
-        console.warn('Error during app initialization:', e);
-      } finally {
-        setIsReady(true);
-        SplashScreen.hideAsync();
-      }
-    }
+//         if (token && userData) {
+//           // User is authenticated, go to main app
+//           router.replace('/(tabs)');
+//         } else {
+//           // User is not authenticated, go to login
+//           router.replace('/(auth)/login');
+//         }
+        
+//         // Simulate loading time (remove in production)
+//         await new Promise(resolve => setTimeout(resolve, 1000));
+//       } catch (e) {
+//         console.warn('Error during app initialization:', e);
+//         // On error, redirect to login
+//         router.replace('/(auth)/login');
+//       } finally {
+//         setIsReady(true);
+//         SplashScreen.hideAsync();
+//       }
+//     }
 
-    prepare();
-  }, []);
+//     prepare();
+//   }, []);
 
-  if (!isReady) {
-    return null;
-  }
+//   if (!isReady) {
+//     return null;
+//   }
 
-  return <Slot />;
-}
-
+//   return <Slot />;
+// }

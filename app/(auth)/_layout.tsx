@@ -1,6 +1,6 @@
-// app/(auth)/_layout.tsx
+// app/(auth)/_layout.tsx - Authentication Layout
 import { Stack } from 'expo-router';
-import { COLORS } from '../../constants/Index';
+import { COLORS } from '../../constants/index';
 
 export default function AuthLayout() {
   return (
@@ -26,12 +26,12 @@ export default function AuthLayout() {
       <Stack.Screen 
         name="biometric-setup" 
         options={{
-          title: 'Setup Biometric Authentication',
+          title: 'Biometric Setup',
           headerBackTitle: 'Back',
-          gestureEnabled: false, // Prevent swipe back
+          gestureEnabled: false, // Prevent swipe back during setup
+          headerLeft: () => null, // Remove back button
         }}
       />
     </Stack>
   );
 }
-

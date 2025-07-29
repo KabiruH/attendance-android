@@ -1,14 +1,14 @@
 // components/common/Button.tsx
 import React from 'react';
 import {
-  ActivityIndicator,
-  StyleSheet,
-  Text,
-  TextStyle,
-  TouchableOpacity,
-  ViewStyle,
+    ActivityIndicator,
+    StyleSheet,
+    Text,
+    TextStyle,
+    TouchableOpacity,
+    ViewStyle,
 } from 'react-native';
-import { LAYOUT, TYPOGRAPHY } from '../../constants/Index';
+import { LAYOUT, TYPOGRAPHY } from '../../constants';
 import { COLORS, } from '../../constants/Colors';
 
 interface ButtonProps {

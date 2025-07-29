@@ -1,10 +1,10 @@
-// app/index.tsx (Entry Point)
-import { router } from 'expo-router';
-import { StyleSheet, View } from 'react-native';
-import { LoadingSpinner } from '../components/ui/LoadingSpinner';
+// app/index.tsx - Simple Entry Point
 import { useEffect } from 'react';
-import { StorageService } from '@/services/StorageService';
-import { COLORS } from '@/constants/Colors';
+import { View, StyleSheet } from 'react-native';
+import { router } from 'expo-router';
+import { LoadingSpinner } from '../components/ui/LoadingSpinner';
+import { StorageService } from '../services/StorageService';
+import { COLORS } from '../constants';
 
 export default function Index() {
   useEffect(() => {
@@ -13,6 +13,9 @@ export default function Index() {
 
   const checkAuthStatus = async () => {
     try {
+      // Add a small delay to prevent flash
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
       const token = await StorageService.getUserToken();
       const userData = await StorageService.getUserData();
       

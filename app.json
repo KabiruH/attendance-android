@@ -16,7 +16,8 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.anonymous.attendance_app"
     },
     "web": {
       "bundler": "metro",
@@ -36,6 +37,7 @@
       ],
       "expo-secure-store"
     ],
+    
     "experiments": {
       "typedRoutes": true
     }

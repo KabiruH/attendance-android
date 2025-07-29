@@ -1,24 +1,23 @@
-// app/(auth)/login.tsx - FIXED VERSION
-import React, { useState, useEffect } from 'react';
+// app/(auth)/login.tsx 
+import { router } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import React, { useEffect, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  SafeAreaView,
+  Alert,
   KeyboardAvoidingView,
   Platform,
+  SafeAreaView,
   ScrollView,
-  Alert,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
-import { router } from 'expo-router';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
+import { COLORS, LAYOUT, TYPOGRAPHY } from '../../constants';
 import { apiService } from '../../services/ApiService';
 import { StorageService } from '../../services/StorageService';
-import { COLORS, TYPOGRAPHY, LAYOUT } from '../../constants/Index';
-
 
 export default function LoginScreen() {
   const [idNumber, setIdNumber] = useState('');
@@ -221,7 +220,7 @@ export default function LoginScreen() {
             {__DEV__ && (
               <View style={styles.debugInfo}>
                 <Text style={styles.debugText}>
-                  🔧 Debug Mode - Server: {apiService['api'].defaults.baseURL}
+                  🔧 Debug Mode - Server: {apiService['api']?.defaults?.baseURL || 'Unknown'}
                 </Text>
               </View>
             )}

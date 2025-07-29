@@ -15,7 +15,6 @@ export const API_CONFIG = {
     BIOMETRIC_ENROLL: '/api/biometric/enroll',      
     BIOMETRIC_STATUS: '/api/biometric/status',     
     CLASSES: '/api/classes/assigned',
-    TEST: '/api/test/mobile',
   },
   TIMEOUT: 10000, // 10 seconds
 };

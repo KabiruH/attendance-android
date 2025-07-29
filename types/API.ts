@@ -4,6 +4,7 @@ export interface ApiResponse<T = any> {
   data?: T;
   message?: string;
   error?: string;
+  status?: number;
 }
 
 export interface BiometricResult {

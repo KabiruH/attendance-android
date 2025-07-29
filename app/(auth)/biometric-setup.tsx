@@ -1,21 +1,21 @@
 // app/(auth)/biometric-setup.tsx
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  SafeAreaView,
-  Alert,
-  ScrollView,
-} from 'react-native';
-import { StatusBar } from 'expo-status-bar';
-import { router, useLocalSearchParams } from 'expo-router';
 import * as LocalAuthentication from 'expo-local-authentication';
+import { router, useLocalSearchParams } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import React, { useEffect, useState } from 'react';
+import {
+  Alert,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { Button } from '../../components/ui/Button';
+import { COLORS, LAYOUT, TYPOGRAPHY } from '../../constants';
 import { apiService } from '../../services/ApiService';
 import { StorageService } from '../../services/StorageService';
-import { COLORS, TYPOGRAPHY, LAYOUT } from '../../constants/Index';
-import { User, Employee } from '../../types/User';
+import { Employee, User } from '../../types/User';
 
 export default function BiometricSetupScreen() {
   const params = useLocalSearchParams();

@@ -1,15 +1,26 @@
-// services/StorageService.ts - FIXED VERSION
+// services/StorageService.ts - CROSS-PLATFORM VERSION
 import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { STORAGE_KEYS } from '../constants/Storage';
-import { User, Employee } from '../types/User';
+import { Platform } from 'react-native';
+import { STORAGE_KEYS } from '../constants';
+import { User, Employee } from '../types';
 
 export class StorageService {
-  // Secure storage methods for sensitive data - FIXED API CALLS
+  // Check if we're running on web (where SecureStore doesn't work)
+  private static isWeb = Platform.OS === 'web';
+
+  // FIXED: Cross-platform secure storage
   static async setSecureItem(key: string, value: string): Promise<void> {
     try {
-      // FIXED: Use the correct API method
-      await SecureStore.setItemAsync(key, value);
+      if (this.isWeb) {
+        // On web, use localStorage (less secure but functional for development)
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem(`secure_${key}`, value);
+        }
+      } else {
+        // On mobile, use SecureStore
+        await SecureStore.setItemAsync(key, value);
+      }
     } catch (error) {
       console.error('Error storing secure item:', error);
       throw new Error('Failed to store secure data');
@@ -18,8 +29,16 @@ export class StorageService {
 
   static async getSecureItem(key: string): Promise<string | null> {
     try {
-      // FIXED: Use the correct API method
-      return await SecureStore.getItemAsync(key);
+      if (this.isWeb) {
+        // On web, use localStorage
+        if (typeof window !== 'undefined') {
+          return window.localStorage.getItem(`secure_${key}`);
+        }
+        return null;
+      } else {
+        // On mobile, use SecureStore
+        return await SecureStore.getItemAsync(key);
+      }
     } catch (error) {
       console.error('Error retrieving secure item:', error);
       return null;
@@ -28,8 +47,15 @@ export class StorageService {
 
   static async deleteSecureItem(key: string): Promise<void> {
     try {
-      // FIXED: Use the correct API method
-      await SecureStore.deleteItemAsync(key);
+      if (this.isWeb) {
+        // On web, use localStorage
+        if (typeof window !== 'undefined') {
+          window.localStorage.removeItem(`secure_${key}`);
+        }
+      } else {
+        // On mobile, use SecureStore
+        await SecureStore.deleteItemAsync(key);
+      }
     } catch (error) {
       console.error('Error deleting secure item:', error);
     }
@@ -144,8 +170,17 @@ export class StorageService {
         this.removeItem(STORAGE_KEYS.EMPLOYEE_DATA),
         this.removeItem(STORAGE_KEYS.BIOMETRIC_ENROLLED),
         this.removeItem(STORAGE_KEYS.ATTENDANCE_CACHE),
-        // Keep last location and settings for convenience
       ]);
+      
+      // Also clear localStorage on web
+      if (this.isWeb && typeof window !== 'undefined') {
+        // Clear any secure items stored in localStorage
+        Object.keys(window.localStorage).forEach(key => {
+          if (key.startsWith('secure_')) {
+            window.localStorage.removeItem(key);
+          }
+        });
+      }
     } catch (error) {
       console.error('Error clearing user data:', error);
     }
@@ -187,6 +222,7 @@ export class StorageService {
       ]);
 
       return {
+        platform: Platform.OS,
         hasToken: !!token,
         userData,
         employeeData,
@@ -197,7 +233,13 @@ export class StorageService {
       };
     } catch (error) {
       console.error('Error getting all stored data:', error);
-      return {};
+      return { platform: Platform.OS };
     }
+  }
+
+  // Development helper to show what's stored
+  static async debugStorage(): Promise<void> {
+    const data = await this.getAllStoredData();
+    console.log('📱 Storage Debug:', data);
   }
 }
