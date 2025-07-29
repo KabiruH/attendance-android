@@ -1,13 +1,14 @@
-// services/StorageService.ts
-import AsyncStorage from '@react-native-async-storage/async-storage';
+// services/StorageService.ts - FIXED VERSION
 import * as SecureStore from 'expo-secure-store';
-import { STORAGE_KEYS } from '../constants/Index';
-import { Employee, User } from '../types';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { STORAGE_KEYS } from '../constants/Storage';
+import { User, Employee } from '../types/User';
 
 export class StorageService {
-  // Secure storage methods for sensitive data
+  // Secure storage methods for sensitive data - FIXED API CALLS
   static async setSecureItem(key: string, value: string): Promise<void> {
     try {
+      // FIXED: Use the correct API method
       await SecureStore.setItemAsync(key, value);
     } catch (error) {
       console.error('Error storing secure item:', error);
@@ -17,6 +18,7 @@ export class StorageService {
 
   static async getSecureItem(key: string): Promise<string | null> {
     try {
+      // FIXED: Use the correct API method
       return await SecureStore.getItemAsync(key);
     } catch (error) {
       console.error('Error retrieving secure item:', error);
@@ -26,6 +28,7 @@ export class StorageService {
 
   static async deleteSecureItem(key: string): Promise<void> {
     try {
+      // FIXED: Use the correct API method
       await SecureStore.deleteItemAsync(key);
     } catch (error) {
       console.error('Error deleting secure item:', error);

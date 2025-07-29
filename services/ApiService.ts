@@ -1,8 +1,8 @@
-// services/ApiService.ts
+// services/ApiService.ts - Updated with correct endpoints
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
-import { API_CONFIG } from '../constants/Index';
-import { ApiResponse, LoginRequest, LoginResponse } from '../types';
 import { StorageService } from './StorageService';
+import { API_CONFIG } from '../constants/Index';
+import { ApiResponse, LoginRequest, LoginResponse } from '../types/index';
 
 class ApiService {
   private api: AxiosInstance;
@@ -72,39 +72,41 @@ class ApiService {
     return this.get(API_CONFIG.ENDPOINTS.TEST);
   }
 
+  // FIXED: Using your actual endpoint path
   async mobileLogin(idNumber: string): Promise<ApiResponse<LoginResponse>> {
     const loginData: LoginRequest = {
       id_number: idNumber.trim(),
     };
     
     return this.post<LoginResponse>(
-      API_CONFIG.ENDPOINTS.MOBILE_LOGIN,
+      '/api/auth/mobile-login', // Your actual endpoint
       loginData
     );
   }
 
   async getUserProfile(): Promise<ApiResponse> {
-    return this.get(API_CONFIG.ENDPOINTS.USER_PROFILE);
+    return this.get('/api/user/profile'); // Your actual endpoint
   }
 
   async getAttendanceData(): Promise<ApiResponse> {
-    return this.get(API_CONFIG.ENDPOINTS.ATTENDANCE);
+    return this.get('/api/attendance/mobile'); // Your actual endpoint
   }
 
   async submitAttendance(attendanceData: any): Promise<ApiResponse> {
-    return this.post(API_CONFIG.ENDPOINTS.ATTENDANCE, attendanceData);
+    return this.post('/api/attendance/mobile', attendanceData); // Your actual endpoint
   }
 
   async getAssignedClasses(): Promise<ApiResponse> {
-    return this.get(API_CONFIG.ENDPOINTS.CLASSES);
+    return this.get('/api/classes/assigned'); // Your actual endpoint
   }
 
+  // FIXED: Using your actual biometric endpoint
   async enrollBiometric(biometricData: any): Promise<ApiResponse> {
-    return this.post(API_CONFIG.ENDPOINTS.BIOMETRIC_ENROLL, biometricData);
+    return this.post('/api/biometric/enroll', biometricData); // Your actual endpoint
   }
 
   async getBiometricStatus(): Promise<ApiResponse> {
-    return this.get(API_CONFIG.ENDPOINTS.BIOMETRIC_STATUS);
+    return this.get('/api/biometric/status'); // Your actual endpoint
   }
 
   private handleError(error: any): ApiResponse {

@@ -1,23 +1,24 @@
-// app/(auth)/login.tsx
-import { router } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import React, { useEffect, useState } from 'react';
+// app/(auth)/login.tsx - FIXED VERSION
+import React, { useState, useEffect } from 'react';
 import {
-    Alert,
-    KeyboardAvoidingView,
-    Platform,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    View
+  View,
+  Text,
+  StyleSheet,
+  SafeAreaView,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Alert,
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { router } from 'expo-router';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
-import { COLORS, LAYOUT, TYPOGRAPHY } from '../../constants/Index';
 import { apiService } from '../../services/ApiService';
 import { StorageService } from '../../services/StorageService';
+import { COLORS, TYPOGRAPHY, LAYOUT } from '../../constants/Index';
+
 
 export default function LoginScreen() {
   const [idNumber, setIdNumber] = useState('');
@@ -81,7 +82,6 @@ export default function LoginScreen() {
       return 'Employee ID must be at least 3 characters';
     }
     
-    // Add any additional validation rules here
     return null;
   };
 
@@ -144,8 +144,8 @@ export default function LoginScreen() {
   };
 
   const handleIdNumberChange = (text: string) => {
-    setIdNumber(text.toUpperCase()); // Convert to uppercase for consistency
-    setError(''); // Clear error when user starts typing
+    setIdNumber(text.toUpperCase());
+    setError('');
   };
 
   if (testingConnection) {
@@ -177,7 +177,6 @@ export default function LoginScreen() {
           {/* Header Section */}
           <View style={styles.header}>
             <View style={styles.logoContainer}>
-              {/* You can add your school logo here */}
               <View style={styles.logoPlaceholder}>
                 <Text style={styles.logoText}>📚</Text>
               </View>

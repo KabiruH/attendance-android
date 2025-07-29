@@ -1,6 +1,4 @@
 // constants/Config.ts
-import Constants from 'expo-constants';
-
 export const API_CONFIG = {
   // Update this with your actual server IP/URL
   DEV_BASE_URL: 'http://192.168.100.10:3000', // Replace with your local IP
@@ -10,16 +8,15 @@ export const API_CONFIG = {
     return __DEV__ ? this.DEV_BASE_URL : this.PROD_BASE_URL;
   },
   
-  ENDPOINTS: {
+   ENDPOINTS: {
     MOBILE_LOGIN: '/api/auth/mobile-login',
     ATTENDANCE: '/api/attendance/mobile',
     USER_PROFILE: '/api/user/profile',
-    BIOMETRIC_ENROLL: '/api/biometric/enroll',
-    BIOMETRIC_STATUS: '/api/biometric/status',
+    BIOMETRIC_ENROLL: '/api/biometric/enroll',      
+    BIOMETRIC_STATUS: '/api/biometric/status',     
     CLASSES: '/api/classes/assigned',
     TEST: '/api/test/mobile',
   },
-  
   TIMEOUT: 10000, // 10 seconds
 };
 

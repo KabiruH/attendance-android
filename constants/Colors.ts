@@ -25,6 +25,18 @@ export const COLORS = {
     800: '#1F2937',
     900: '#111827',
   },
+    light: {
+    tint: '#3B82F6',
+    background: '#F9FAFB',
+    text: '#111827',
+    // ... other theme-specific colors
+  },
+  dark: {
+    tint: '#2563EB',
+    background: '#000000',
+    text: '#FFFFFF',
+    // ... other theme-specific colors
+  },
   
   // Background colors
   background: '#F9FAFB',
