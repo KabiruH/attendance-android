@@ -33,9 +33,12 @@ export interface BiometricResult {
 class AttendanceService {
   // School geofence configuration
   private readonly GEOFENCE = {
-    latitude: -1.22486,
-    longitude: 36.70958,
-    radius: 50, // meters
+    // latitude: -1.22486,
+    // longitude: 36.70958,
+    //  radius: 50, // meters
+  latitude: -0.0236,
+  longitude: 37.9062,
+    radius: 600_000, // meters
   };
 
   async requestLocationPermission(): Promise<boolean> {
@@ -161,7 +164,7 @@ class AttendanceService {
       const biometricResult = await this.verifyBiometric(
         `Verify your identity to ${type.replace('_', ' ')}`
       );
-      
+
       if (!biometricResult.success) {
         return {
           success: false,

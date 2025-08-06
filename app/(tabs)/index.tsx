@@ -64,20 +64,83 @@ export default function DashboardScreen() {
     }
   };
 
-  const loadAttendanceData = async () => {
-    try {
-      const response = await apiService.getAttendanceData();
-      if (response.success && response.data) {
-        setAttendanceData(response.data);
-        calculateStats(response.data);
-      }
-    } catch (error) {
-      console.error('Error loading attendance data:', error);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
+const loadAttendanceData = async () => {
+  try {
+    console.log('📱 Loading attendance data...');
+    
+    // Add a small delay to ensure any recent changes are committed to DB
+    if (refreshing) {
+      await new Promise(resolve => setTimeout(resolve, 500));
     }
-  };
+    
+    const response = await apiService.getAttendanceData();
+    
+    console.log('🔍 Dashboard received response:', JSON.stringify(response, null, 2));
+    
+    if (response.success && response.data) {
+      const workData = response.data.work;
+      
+      console.log('📊 Work data structure:', {
+        hasToday: !!workData?.today,
+        isCheckedIn: workData?.today?.is_checked_in,
+        hasWorkAttendance: !!workData?.today?.work_attendance,
+        workAttendanceId: workData?.today?.work_attendance?.id,
+        checkInTime: workData?.today?.work_attendance?.check_in_time,
+        checkOutTime: workData?.today?.work_attendance?.check_out_time,
+        historyCount: workData?.history?.length || 0
+      });
+      
+      // Create the attendance data structure your dashboard expects
+      const attendanceData = {
+        today: {
+          work_attendance: workData?.today?.work_attendance || null,
+          is_checked_in: workData?.today?.is_checked_in || false,
+          class_attendance: response.data.class?.today?.class_attendance || []
+        },
+        history: workData?.history || [],
+        current_date: workData?.current_date || new Date().toISOString().split('T')[0]
+      };
+      
+      console.log('📋 Setting attendance data:', {
+        isCheckedIn: attendanceData.today.is_checked_in,
+        hasWorkAttendance: !!attendanceData.today.work_attendance,
+        historyCount: attendanceData.history.length
+      });
+      
+      setAttendanceData(attendanceData);
+      calculateStats(attendanceData);
+    } else {
+      console.log('❌ API response failed or no data:', response.error);
+      // Set default empty state
+      setAttendanceData({
+        today: {
+          work_attendance: null,
+          is_checked_in: false,
+          class_attendance: []
+        },
+        history: [],
+        current_date: new Date().toISOString().split('T')[0]
+      });
+      setStats(null);
+    }
+  } catch (error) {
+    console.error('💥 Error loading attendance data:', error);
+    // Set default empty state on error
+    setAttendanceData({
+      today: {
+        work_attendance: null,
+        is_checked_in: false,
+        class_attendance: []
+      },
+      history: [],
+      current_date: new Date().toISOString().split('T')[0]
+    });
+    setStats(null);
+  } finally {
+    setLoading(false);
+    setRefreshing(false);
+  }
+};
 
   const checkLocationStatus = async () => {
     try {
@@ -90,48 +153,98 @@ export default function DashboardScreen() {
     }
   };
 
-  const calculateStats = (data: AttendanceResponse) => {
-    // Calculate today's hours
-    let todayHours = '0h 0m';
-    if (data.today.work_attendance?.check_in_time) {
-      const checkIn = new Date(data.today.work_attendance.check_in_time);
-      const checkOut = data.today.work_attendance.check_out_time 
-        ? new Date(data.today.work_attendance.check_out_time)
-        : new Date();
-      
-      const diffMs = checkOut.getTime() - checkIn.getTime();
-      const hours = Math.floor(diffMs / (1000 * 60 * 60));
-      const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-      todayHours = `${hours}h ${minutes}m`;
+const calculateStats = (data: AttendanceResponse) => {
+  console.log('📈 Calculating stats with data:', {
+    hasTodayWorkAttendance: !!data?.today?.work_attendance,
+    checkInTime: data?.today?.work_attendance?.check_in_time,
+    checkOutTime: data?.today?.work_attendance?.check_out_time,
+    historyLength: data?.history?.length || 0
+  });
+
+  // Helper function to check if a date is a weekend (Saturday or Sunday)
+  const isWeekend = (date: Date) => {
+    const day = date.getDay();
+    return day === 0 || day === 6;
+  };
+
+  // Calculate today's hours
+  let todayHours = '0h 0m';
+  if (data?.today?.work_attendance?.check_in_time) {
+    const checkIn = new Date(data.today.work_attendance.check_in_time);
+    const checkOut = data.today.work_attendance.check_out_time 
+      ? new Date(data.today.work_attendance.check_out_time)
+      : new Date();
+    
+    const diffMs = checkOut.getTime() - checkIn.getTime();
+    const hours = Math.floor(diffMs / (1000 * 60 * 60));
+    const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+    todayHours = `${hours}h ${minutes}m`;
+  }
+
+  // Get current date and set up date ranges
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+
+  // Calculate weekly hours (current week starting from Monday)
+  const currentDay = now.getDay(); // 0 (Sunday) to 6 (Saturday)
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - (currentDay === 0 ? 6 : currentDay - 1)); // Adjust to previous Monday
+  monday.setHours(0, 0, 0, 0); // Start of Monday
+
+  // Calculate monthly stats (current month starting from 1st, excluding weekends)
+  const firstDayOfMonth = new Date(currentYear, currentMonth, 1);
+  firstDayOfMonth.setHours(0, 0, 0, 0);
+
+  let weeklyMs = 0;
+  let monthlyDays = 0;
+  let onTimeCount = 0;
+  let totalDays = 0;
+
+  (data?.history || []).forEach(record => {
+    if (!record.check_in_time || !record.check_out_time) return;
+
+    const recordDate = new Date(record.check_in_time);
+    const dateKey = recordDate.toISOString().split('T')[0]; // YYYY-MM-DD
+
+    // Skip weekends
+    if (isWeekend(recordDate)) return;
+
+    // Calculate weekly hours (records from Monday of this week)
+    if (recordDate >= monday) {
+      const checkIn = new Date(record.check_in_time);
+      const checkOut = new Date(record.check_out_time);
+      weeklyMs += checkOut.getTime() - checkIn.getTime();
     }
 
-    // Calculate weekly hours (last 7 days)
-    const weeklyMs = data.history
-      .filter(record => record.check_in_time && record.check_out_time)
-      .reduce((total, record) => {
-        const checkIn = new Date(record.check_in_time!);
-        const checkOut = new Date(record.check_out_time!);
-        return total + (checkOut.getTime() - checkIn.getTime());
-      }, 0);
-    
-    const weeklyHours = Math.floor(weeklyMs / (1000 * 60 * 60));
-    const weeklyMinutes = Math.floor((weeklyMs % (1000 * 60 * 60)) / (1000 * 60));
+    // Calculate monthly stats (records from 1st of this month)
+    if (recordDate >= firstDayOfMonth && recordDate.getMonth() === currentMonth) {
+      if (record.status === 'Present' || record.status === 'Late') {
+        monthlyDays++;
+      }
+      
+      if (record.status === 'Present') {
+        onTimeCount++;
+      }
+      
+      totalDays++;
+    }
+  });
 
-    // Calculate monthly stats
-    const monthlyDays = data.history.filter(record => 
-      record.status === 'Present' || record.status === 'Late'
-    ).length;
+  const weeklyHours = Math.floor(weeklyMs / (1000 * 60 * 60));
+  const weeklyMinutes = Math.floor((weeklyMs % (1000 * 60 * 60)) / (1000 * 60));
+  const onTimePercentage = totalDays > 0 ? Math.round((onTimeCount / totalDays) * 100) : 0;
 
-    const onTimeCount = data.history.filter(record => record.status === 'Present').length;
-    const onTimePercentage = data.history.length > 0 ? Math.round((onTimeCount / data.history.length) * 100) : 100;
-
-    setStats({
-      todayHours,
-      weeklyHours: `${weeklyHours}h ${weeklyMinutes}m`,
-      monthlyDays,
-      onTimePercentage,
-    });
+  const calculatedStats = {
+    todayHours,
+    weeklyHours: `${weeklyHours}h ${weeklyMinutes}m`,
+    monthlyDays,
+    onTimePercentage,
   };
+  
+  console.log('📊 Final calculated stats:', calculatedStats);
+  setStats(calculatedStats);
+};
 
   const handleWorkCheckIn = async () => {
     await handleAttendanceAction('work_checkin', 'Checking in to work...');
@@ -249,9 +362,9 @@ export default function DashboardScreen() {
     );
   }
 
-  const isCheckedIn = attendanceData?.today.is_checked_in || false;
-  const todayAttendance = attendanceData?.today.work_attendance;
-  const todayClasses = attendanceData?.today.class_attendance || [];
+  const isCheckedIn = attendanceData?.today?.is_checked_in || false;
+  const todayAttendance = attendanceData?.today?.work_attendance;
+  const todayClasses = attendanceData?.today?.class_attendance || [];
 
   return (
     <SafeAreaView style={styles.container}>

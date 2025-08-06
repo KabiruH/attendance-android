@@ -55,7 +55,7 @@ export default function BiometricSetupScreen() {
 
   const getBiometricTypeName = (): string => {
     if (biometricTypes.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)) {
-      return 'Face ID';
+      return 'Face ID/ Touch ID/ Fingerprint';
     } else if (biometricTypes.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)) {
       return 'Touch ID / Fingerprint';
     } else if (biometricTypes.includes(LocalAuthentication.AuthenticationType.IRIS)) {

@@ -1,4 +1,4 @@
-// services/ApiService.ts - Updated with correct endpoints and classes methods
+// services/ApiService.ts - Updated to use unified attendance endpoint
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
 import { API_CONFIG } from '../constants';
 import { ApiResponse, LoginRequest, LoginResponse } from '../types/index';
@@ -36,13 +36,13 @@ class ApiService {
       (response: AxiosResponse) => response,
       async (error) => {
         console.error('API Error:', error.response?.data || error.message);
-        
+
         // Handle token expiration
         if (error.response?.status === 401) {
           await StorageService.clearAllUserData();
           // You might want to navigate to login here
         }
-        
+
         return Promise.reject(error);
       }
     );
@@ -90,7 +90,7 @@ class ApiService {
     const loginData: LoginRequest = {
       id_number: idNumber.trim(),
     };
-    
+
     return this.post<LoginResponse>(
       '/api/auth/mobile-login',
       loginData
@@ -101,17 +101,202 @@ class ApiService {
     return this.get('/api/user/profile');
   }
 
-  // Attendance methods
-  async getAttendanceData(): Promise<ApiResponse> {
-    return this.get('/api/attendance/mobile');
+async getAttendanceData(): Promise<ApiResponse> {
+  try {
+    // Use the unified attendance endpoint for status check
+    const response = await this.get('/api/attendance');
+    if (response.success) {
+      const today = new Date().toISOString().split('T')[0];
+      
+      // Initialize default structure
+      let transformedData = {
+        work: {
+          today: {
+            work_attendance: null as any,
+            is_checked_in: false
+          },
+          history: [] as any[],
+          current_date: today
+        },
+        class: {
+          today: {
+            class_attendance: []
+          },
+          history: []
+        }
+      };
+
+      // Cast to 'any' to fix TypeScript errors
+      const responseData = (response.data || response) as any;
+      
+      // Now TypeScript won't complain about accessing properties
+      if (responseData.role === 'employee') {
+        // Extract attendance data
+        const attendanceRecords = responseData.attendanceData || [];
+        
+        // Set the check-in status from the API response
+        transformedData.work.today.is_checked_in = responseData.isCheckedIn || false;
+        
+        // Find today's record
+        const todayRecord = attendanceRecords.find((record: any) => {
+          if (!record.date) return false;
+          const recordDate = new Date(record.date).toISOString().split('T')[0];
+          return recordDate === today;
+        });
+        
+        if (todayRecord) {
+          // Set today's attendance record
+          transformedData.work.today.work_attendance = todayRecord;
+          
+          // Double-check the checked-in status based on the record
+          // The API already provides isCheckedIn, but we can verify
+          if (!responseData.isCheckedIn && todayRecord.check_in_time && !todayRecord.check_out_time) {
+            transformedData.work.today.is_checked_in = true;
+          }
+        }
+        
+        // Set the history (all records)
+        transformedData.work.history = attendanceRecords;
+        
+      } else if (responseData.role === 'admin') {
+        // Admin sees all employee data
+        transformedData.work.history = responseData.attendanceData || [];
+        transformedData.work.today.is_checked_in = false; // Admins don't have personal check-in
+      
+        
+      } else if (responseData.role === 'unauthenticated') {
+        // User is not authenticated
+        return {
+          success: false,
+          error: 'User is not authenticated'
+        };
+      }
+      
+      return {
+        success: true,
+        data: transformedData
+      };
+    }
+    
+    return response;
+  } catch (error) {
+    console.error('❌ getAttendanceData error:', error);
+    return this.handleError(error);
+  }
+}
+
+
+async submitWorkAttendance(attendanceData: {
+  type: 'work_checkin' | 'work_checkout';
+  location: {
+    latitude: number;
+    longitude: number;
+    accuracy: number;
+    timestamp: number;
+  };
+  biometric_verified: boolean;
+}): Promise<ApiResponse> {
+  // Use the unified attendance endpoint
+  return this.post('/api/attendance', attendanceData);
+}
+
+async getWorkAttendanceHistory(days: number = 7): Promise<ApiResponse> {
+  // The unified route's GET endpoint returns attendance history
+  return this.get('/api/attendance');
+}
+
+async submitAttendance(attendanceData: any): Promise<ApiResponse> {
+  
+  try {
+    let response;
+    
+    // All work attendance goes through the unified endpoint
+    if (attendanceData.type === 'work_checkin' || attendanceData.type === 'work_checkout') {
+      response = await this.post('/api/attendance', attendanceData);
+    } else if (attendanceData.type === 'class_checkin' || attendanceData.type === 'class_checkout') {
+      // Use the class attendance endpoint if you have one
+      response = await this.post('/api/attendance/class-checkin', attendanceData);
+    } else {
+      return {
+        success: false,
+        error: 'Invalid attendance type'
+      };
+    }
+    
+    return response;
+  } catch (error) {
+    console.error('❌ submitAttendance error:', error);
+    return this.handleError(error);
+  }
+}
+
+async refreshAttendanceData(): Promise<ApiResponse> {
+  // Fetch fresh data
+  return this.getAttendanceData();
+}
+
+async getWorkAttendanceData(): Promise<ApiResponse> {
+  // Use unified endpoint for work attendance data
+  return this.get('/api/attendance');
+}
+
+async getAttendanceStatus(): Promise<ApiResponse> {
+  try {
+    const response = await this.getWorkAttendanceData();
+    
+    if (response.success) {
+      // Adapt the response structure to match your app's expectations
+      const attendanceData = response.data?.attendanceData || [];
+      const today = new Date().toISOString().split('T')[0];
+      const todayAttendance = attendanceData.find((record: any) => 
+        record.date && new Date(record.date).toISOString().split('T')[0] === today
+      );
+
+      return {
+        success: true,
+        data: {
+          isCheckedIn: response.data?.isCheckedIn || false,
+          workAttendance: todayAttendance,
+          classAttendance: null, // You'll need to handle this separately
+          activeClassSession: null
+        }
+      };
+    }
+
+    return response;
+  } catch (error) {
+    return this.handleError(error);
+  }
+}
+
+  async getWorkAttendanceReport(params?: {
+    startDate?: string;
+    endDate?: string;
+    employeeId?: number;
+  }): Promise<ApiResponse> {
+    const queryParams = new URLSearchParams();
+    if (params?.startDate) queryParams.append('start_date', params.startDate);
+    if (params?.endDate) queryParams.append('end_date', params.endDate);
+    if (params?.employeeId) queryParams.append('employee_id', params.employeeId.toString());
+
+    const endpoint = `/api/reports/work-attendance${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+    return this.get(endpoint);
   }
 
-  async submitAttendance(attendanceData: any): Promise<ApiResponse> {
-    return this.post('/api/attendance/mobile', attendanceData);
-  }
+  async getClassAttendanceReport(params?: {
+    classId?: number;
+    trainerId?: number;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<ApiResponse> {
+    const queryParams = new URLSearchParams();
+    if (params?.classId) queryParams.append('class_id', params.classId.toString());
+    if (params?.trainerId) queryParams.append('trainer_id', params.trainerId.toString());
+    if (params?.startDate) queryParams.append('start_date', params.startDate);
+    if (params?.endDate) queryParams.append('end_date', params.endDate);
 
-  async getAttendanceStatus(): Promise<ApiResponse> {
-    return this.get('/api/attendance/status');
+    const endpoint = `/api/reports/class-attendance${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+    return this.get(endpoint);
   }
 
   // Classes methods
@@ -120,7 +305,7 @@ class ApiService {
   }
 
   async getAllClasses(activeOnly: boolean = false): Promise<ApiResponse> {
-    const endpoint = `/api/classes${activeOnly ? '?active_only=true' : ''}`;
+    const endpoint = '/api/classes';
     return this.get(endpoint);
   }
 
@@ -154,24 +339,31 @@ class ApiService {
     return this.delete(`/api/classes/${classId}`);
   }
 
-  // Class attendance methods
-  async submitClassAttendance(attendanceData: {
-    type: 'class_checkin' | 'class_checkout';
-    class_id: number;
-    location: {
-      latitude: number;
-      longitude: number;
-      accuracy: number;
-      timestamp: number;
-    };
-    biometric_verified: boolean;
-  }): Promise<ApiResponse> {
-    return this.post('/api/attendance/mobile', attendanceData);
+  async getClassAttendanceData(): Promise<ApiResponse> {
+    // You might need a separate endpoint for class attendance
+    // or extend the unified route to handle class attendance
+    return this.get('/api/attendance/mobile/class');
   }
 
+  // Class attendance methods - these might need separate endpoints
+async submitClassAttendance(attendanceData: {
+  type: 'class_checkin' | 'class_checkout';
+  class_id: number;
+  location: {
+    latitude: number;
+    longitude: number;
+    accuracy: number;
+    timestamp: number;
+  };
+  biometric_verified: boolean;
+}): Promise<ApiResponse> {
+  // Use the unified class attendance endpoint
+  return this.post('/api/attendance/class-checkin', attendanceData);
+}
+
   async getClassAttendanceHistory(classId?: number): Promise<ApiResponse> {
-    const endpoint = classId 
-      ? `/api/attendance/class/${classId}` 
+    const endpoint = classId
+      ? `/api/attendance/class/${classId}`
       : '/api/attendance/class';
     return this.get(endpoint);
   }
@@ -201,6 +393,34 @@ class ApiService {
     return this.post('/api/user/change-password', passwordData);
   }
 
+  async mobileLoginWithPassword(idNumber: string, password: string) {
+    try {
+      const response = await this.api.post('/api/auth/mobile-login', {
+        id_number: idNumber,
+        password: password
+      });
+
+      return {
+        success: true,
+        data: response.data.data
+      };
+    } catch (error: any) {
+      console.error('Mobile login with password error:', error);
+
+      if (error.response) {
+        return {
+          success: false,
+          error: error.response.data.error || 'Login failed'
+        };
+      }
+
+      return {
+        success: false,
+        error: 'Network error. Please check your connection.'
+      };
+    }
+  }
+
   // Reports and analytics
   async getAttendanceReport(params?: {
     startDate?: string;
@@ -211,7 +431,7 @@ class ApiService {
     if (params?.startDate) queryParams.append('start_date', params.startDate);
     if (params?.endDate) queryParams.append('end_date', params.endDate);
     if (params?.employeeId) queryParams.append('employee_id', params.employeeId.toString());
-    
+
     const endpoint = `/api/reports/attendance${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
     return this.get(endpoint);
   }
@@ -223,7 +443,7 @@ class ApiService {
     const queryParams = new URLSearchParams();
     if (params?.startDate) queryParams.append('start_date', params.startDate);
     if (params?.endDate) queryParams.append('end_date', params.endDate);
-    
+
     const endpoint = `/api/reports/class/${classId}${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
     return this.get(endpoint);
   }
@@ -254,10 +474,10 @@ class ApiService {
   private handleError(error: any): ApiResponse {
     if (error.response) {
       // Server responded with error status
-      const errorMessage = error.response.data?.error || 
-                          error.response.data?.message || 
-                          'Server error occurred';
-      
+      const errorMessage = error.response.data?.error ||
+        error.response.data?.message ||
+        'Server error occurred';
+
       return {
         success: false,
         error: errorMessage,

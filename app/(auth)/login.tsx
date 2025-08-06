@@ -21,42 +21,17 @@ import { StorageService } from '../../services/StorageService';
 
 export default function LoginScreen() {
   const [idNumber, setIdNumber] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [testingConnection, setTestingConnection] = useState(true);
+  const [errors, setErrors] = useState({
+    idNumber: '',
+    password: '',
+    general: ''
+  });
 
   useEffect(() => {
-    // Test API connection on component mount
-    testApiConnection();
-    
-    // Check if user is already logged in
     checkExistingAuth();
   }, []);
-
-  const testApiConnection = async () => {
-    try {
-      const response = await apiService.testConnection();
-      if (response.success) {
-        console.log('✅ API connection successful');
-      } else {
-        console.log('❌ API connection failed:', response.error);
-        Alert.alert(
-          'Connection Issue',
-          'Unable to connect to the server. Please check your network connection.',
-          [{ text: 'OK' }]
-        );
-      }
-    } catch (error) {
-      console.error('API connection test failed:', error);
-      Alert.alert(
-        'Connection Error',
-        'Cannot reach the server. Please ensure you are connected to the correct network.',
-        [{ text: 'OK' }]
-      );
-    } finally {
-      setTestingConnection(false);
-    }
-  };
 
   const checkExistingAuth = async () => {
     try {
@@ -72,33 +47,43 @@ export default function LoginScreen() {
     }
   };
 
-  const validateIdNumber = (id: string): string | null => {
-    if (!id.trim()) {
-      return 'Employee ID is required';
+  const validateForm = (): boolean => {
+    const newErrors = {
+      idNumber: '',
+      password: '',
+      general: ''
+    };
+
+    if (!idNumber.trim()) {
+      newErrors.idNumber = 'Employee ID is required';
+    } else if (idNumber.trim().length < 3) {
+      newErrors.idNumber = 'Employee ID must be at least 3 characters';
     }
-    
-    if (id.trim().length < 3) {
-      return 'Employee ID must be at least 3 characters';
+
+    if (!password.trim()) {
+      newErrors.password = 'Password is required';
+    } else if (password.length < 6) {
+      newErrors.password = 'Password must be at least 6 characters';
     }
-    
-    return null;
+
+    setErrors(newErrors);
+    return !newErrors.idNumber && !newErrors.password;
   };
 
   const handleLogin = async () => {
-    setError('');
+    // Clear general error
+    setErrors(prev => ({ ...prev, general: '' }));
     
-    // Validate input
-    const validationError = validateIdNumber(idNumber);
-    if (validationError) {
-      setError(validationError);
+    // Validate form
+    if (!validateForm()) {
       return;
     }
 
     setLoading(true);
 
     try {
-      // Call the mobile login API
-      const response = await apiService.mobileLogin(idNumber);
+      // Call the updated mobile login API with password
+      const response = await apiService.mobileLoginWithPassword(idNumber, password);
       
       if (response.success && response.data) {
         const { user, employee, token, biometric_enrolled } = response.data;
@@ -132,11 +117,17 @@ export default function LoginScreen() {
         }
       } else {
         // Login failed
-        setError(response.error || 'Login failed. Please try again.');
+        setErrors(prev => ({
+          ...prev,
+          general: response.error || 'Login failed. Please check your credentials and try again.'
+        }));
       }
     } catch (error: any) {
       console.error('Login error:', error);
-      setError('Unable to connect to the server. Please try again.');
+      setErrors(prev => ({
+        ...prev,
+        general: 'Unable to connect to the server. Please try again.'
+      }));
     } finally {
       setLoading(false);
     }
@@ -144,22 +135,13 @@ export default function LoginScreen() {
 
   const handleIdNumberChange = (text: string) => {
     setIdNumber(text.toUpperCase());
-    setError('');
+    setErrors(prev => ({ ...prev, idNumber: '', general: '' }));
   };
 
-  if (testingConnection) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <StatusBar style="dark" />
-        <View style={styles.centerContent}>
-          <LoadingSpinner 
-            message="Connecting to server..." 
-            size="large" 
-          />
-        </View>
-      </SafeAreaView>
-    );
-  }
+  const handlePasswordChange = (text: string) => {
+    setPassword(text);
+    setErrors(prev => ({ ...prev, password: '', general: '' }));
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -172,6 +154,7 @@ export default function LoginScreen() {
         <ScrollView 
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
           {/* Header Section */}
           <View style={styles.header}>
@@ -183,7 +166,7 @@ export default function LoginScreen() {
             
             <Text style={styles.title}>Employee Attendance</Text>
             <Text style={styles.subtitle}>
-              Enter your Employee ID to sign in
+              Sign in to mark your attendance
             </Text>
           </View>
 
@@ -196,25 +179,57 @@ export default function LoginScreen() {
               placeholder="Enter your employee ID (e.g., EMP001)"
               autoCapitalize="characters"
               autoCorrect={false}
-              error={error}
+              error={errors.idNumber}
               required
               editable={!loading}
+              returnKeyType="next"
+              style={styles.input}
             />
 
+            <Input
+              label="Password"
+              value={password}
+              onChangeText={handlePasswordChange}
+              placeholder="Enter your password"
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+              error={errors.password}
+              required
+              editable={!loading}
+              returnKeyType="done"
+              onSubmitEditing={handleLogin}
+              style={styles.input}
+            />
+
+            {/* General Error Message */}
+            {errors.general ? (
+              <View style={styles.errorContainer}>
+                <Text style={styles.errorText}>{errors.general}</Text>
+              </View>
+            ) : null}
+
             <Button
-              title="Continue"
+              title="Sign In"
               onPress={handleLogin}
               loading={loading}
-              disabled={loading || !idNumber.trim()}
+              disabled={loading || !idNumber.trim() || !password.trim()}
               size="large"
               style={styles.loginButton}
             />
+
+            {/* Forgot Password Link */}
+            <View style={styles.forgotPasswordContainer}>
+              <Text style={styles.forgotPasswordText}>
+                Forgot your password? Contact your administrator
+              </Text>
+            </View>
           </View>
 
           {/* Footer Section */}
           <View style={styles.footer}>
             <Text style={styles.footerText}>
-              Need help? Contact your administrator
+              Need help? Contact IT support
             </Text>
             
             {__DEV__ && (
@@ -245,12 +260,8 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: 'center',
     padding: LAYOUT.padding.xl,
-  },
-  
-  centerContent: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    paddingTop: LAYOUT.padding['2xl'],
+    paddingBottom: LAYOUT.padding['2xl'],
   },
   
   header: {
@@ -292,11 +303,42 @@ const styles = StyleSheet.create({
   },
   
   form: {
-    marginBottom: LAYOUT.spacing['3xl'],
+    marginBottom: LAYOUT.spacing['2xl'],
+  },
+  
+  input: {
+    marginBottom: LAYOUT.spacing.base,
+  },
+  
+  errorContainer: {
+    backgroundColor: COLORS.error + '10',
+    borderRadius: LAYOUT.borderRadius.base,
+    padding: LAYOUT.padding.base,
+    marginBottom: LAYOUT.spacing.base,
+    borderWidth: 1,
+    borderColor: COLORS.error + '30',
+  },
+  
+  errorText: {
+    color: COLORS.error,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    textAlign: 'center',
+    lineHeight: TYPOGRAPHY.lineHeight.relaxed * TYPOGRAPHY.fontSize.sm,
   },
   
   loginButton: {
+    marginTop: LAYOUT.spacing.sm,
+  },
+  
+  forgotPasswordContainer: {
     marginTop: LAYOUT.spacing.lg,
+    alignItems: 'center',
+  },
+  
+  forgotPasswordText: {
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.text.secondary,
+    textAlign: 'center',
   },
   
   footer: {
