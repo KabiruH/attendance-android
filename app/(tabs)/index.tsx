@@ -66,28 +66,24 @@ export default function DashboardScreen() {
 
 const loadAttendanceData = async () => {
   try {
-    console.log('📱 Loading attendance data...');
+    console.log('📱 Loading all attendance data...');
     
-    // Add a small delay to ensure any recent changes are committed to DB
-    if (refreshing) {
-      await new Promise(resolve => setTimeout(resolve, 500));
-    }
+    // Fetch both work and class attendance
+    const response = await apiService.getAllAttendanceData();
     
-    const response = await apiService.getAttendanceData();
-    
-    console.log('🔍 Dashboard received response:', JSON.stringify(response, null, 2));
+    console.log('🔍 Combined attendance response:', JSON.stringify(response, null, 2));
     
     if (response.success && response.data) {
+      // Process work attendance
       const workData = response.data.work;
+      const classData = response.data.class;
       
-      console.log('📊 Work data structure:', {
-        hasToday: !!workData?.today,
+      console.log('📊 Data structure:', {
+        hasWorkData: !!workData,
         isCheckedIn: workData?.today?.is_checked_in,
-        hasWorkAttendance: !!workData?.today?.work_attendance,
-        workAttendanceId: workData?.today?.work_attendance?.id,
-        checkInTime: workData?.today?.work_attendance?.check_in_time,
-        checkOutTime: workData?.today?.work_attendance?.check_out_time,
-        historyCount: workData?.history?.length || 0
+        hasClassData: !!classData,
+        todayClasses: classData?.today?.class_attendance?.length || 0,
+        activeClassSession: classData?.today?.active_class_session
       });
       
       // Create the attendance data structure your dashboard expects
@@ -95,44 +91,50 @@ const loadAttendanceData = async () => {
         today: {
           work_attendance: workData?.today?.work_attendance || null,
           is_checked_in: workData?.today?.is_checked_in || false,
-          class_attendance: response.data.class?.today?.class_attendance || []
+          class_attendance: classData?.today?.class_attendance || [],
+          active_class_session: classData?.today?.active_class_session || null
         },
         history: workData?.history || [],
+        classHistory: classData?.history || [],
         current_date: workData?.current_date || new Date().toISOString().split('T')[0]
       };
       
-      console.log('📋 Setting attendance data:', {
+      console.log('📋 Final attendance data:', {
         isCheckedIn: attendanceData.today.is_checked_in,
         hasWorkAttendance: !!attendanceData.today.work_attendance,
-        historyCount: attendanceData.history.length
+        classAttendanceCount: attendanceData.today.class_attendance.length,
+        hasActiveClass: !!attendanceData.today.active_class_session
       });
       
       setAttendanceData(attendanceData);
       calculateStats(attendanceData);
     } else {
-      console.log('❌ API response failed or no data:', response.error);
+      console.log('❌ Failed to load attendance data:', response.error);
       // Set default empty state
       setAttendanceData({
         today: {
           work_attendance: null,
           is_checked_in: false,
-          class_attendance: []
+          class_attendance: [],
+          active_class_session: null
         },
         history: [],
+        classHistory: [],
         current_date: new Date().toISOString().split('T')[0]
       });
       setStats(null);
     }
   } catch (error) {
     console.error('💥 Error loading attendance data:', error);
-    // Set default empty state on error
     setAttendanceData({
       today: {
         work_attendance: null,
         is_checked_in: false,
-        class_attendance: []
+        class_attendance: [],
+        active_class_session: null
       },
       history: [],
+      classHistory: [],
       current_date: new Date().toISOString().split('T')[0]
     });
     setStats(null);
@@ -254,21 +256,143 @@ const calculateStats = (data: AttendanceResponse) => {
     await handleAttendanceAction('work_checkout', 'Checking out from work...');
   };
 
-  const handleClassCheckIn = async (classId?: number) => {
-    if (!classId) {
-      Alert.alert('Select Class', 'Please select a class to check in to.');
-      return;
-    }
-    await handleAttendanceAction('class_checkin', 'Checking in to class...', classId);
-  };
+ const handleClassCheckIn = async (classId?: number) => {
+  if (!classId) {
+    Alert.alert('Select Class', 'Please select a class to check in to.');
+    return;
+  }
+  
+  // Check if already in a class
+  const currentAttendance = attendanceData; // Use the state variable
+  if (currentAttendance?.today?.active_class_session) {
+    Alert.alert(
+      'Active Class Session',
+      `You are already checked into a class. Please check out first.`,
+      [{ text: 'OK' }]
+    );
+    return;
+  }
+  
+  await handleClassAttendanceAction('class_checkin', classId);
+};
 
-  const handleClassCheckOut = async (classId?: number) => {
-    if (!classId) {
+
+
+const handleClassCheckOut = async (classId?: number) => {
+  let targetClassId = classId;
+  
+  if (!targetClassId) {
+    // If no class ID provided, try to use the active session
+    const currentAttendance = attendanceData; // Use the state variable
+    const activeSession = currentAttendance?.today?.active_class_session;
+    if (activeSession?.class_id) {
+      targetClassId = activeSession.class_id;
+    } else {
       Alert.alert('Select Class', 'Please select a class to check out from.');
       return;
     }
-    await handleAttendanceAction('class_checkout', 'Checking out from class...', classId);
-  };
+  }
+  
+  await handleClassAttendanceAction('class_checkout', targetClassId);
+};
+
+const handleClassAttendanceAction = async (
+  type: 'class_checkin' | 'class_checkout',
+  classId: number
+) => {
+  setActionLoading(type);
+
+  try {
+    // Check if checked into work first
+    const currentAttendance = attendanceData; // Use the state variable
+    if (!currentAttendance?.today?.is_checked_in) {
+      Alert.alert(
+        'Check In Required',
+        'You must check into work before checking into classes.',
+        [{ text: 'OK' }]
+      );
+      setActionLoading(null);
+      return;
+    }
+
+    // Check location
+    const locationResult = await LocationService.getCurrentLocation();
+    if (!locationResult.success || !locationResult.withinGeofence) {
+      Alert.alert(
+        'Location Required',
+        `You must be within the school premises. Distance: ${locationResult.distance}m`,
+        [{ text: 'OK' }]
+      );
+      setActionLoading(null);
+      return;
+    }
+
+    // Verify biometric
+    const biometricResult = await BiometricService.authenticateWithBiometrics(
+      `Please verify your identity to ${type.replace('_', ' ')}`
+    );
+
+    if (!biometricResult.success) {
+      Alert.alert(
+        'Authentication Failed',
+        biometricResult.error || 'Biometric authentication is required',
+        [{ text: 'OK' }]
+      );
+      setActionLoading(null);
+      return;
+    }
+
+    // Submit class attendance - renamed variable to avoid conflict
+    const classAttendanceRequest = {
+      type,
+      class_id: classId,
+      location: locationResult.location!,
+      biometric_verified: true,
+    };
+
+    console.log('📤 Submitting class attendance:', classAttendanceRequest);
+    const response = await apiService.submitClassAttendance(classAttendanceRequest);
+    console.log('📥 Class submission response:', response);
+
+    if (response.success) {
+      const className = response.data?.class_name || 'class';
+      const action = type === 'class_checkin' ? 'checked into' : 'checked out from';
+      
+      Alert.alert(
+        'Success!',
+        `Successfully ${action} ${className}`,
+        [
+          {
+            text: 'OK',
+            onPress: async () => {
+              // Refresh all data
+              setTimeout(() => {
+                console.log('🔄 Refreshing after class action...');
+                loadAttendanceData();
+              }, 1000);
+            },
+          },
+        ]
+      );
+    } else {
+      Alert.alert(
+        'Error',
+        response.error || 'Failed to record class attendance',
+        [{ text: 'OK' }]
+      );
+    }
+  } catch (error: any) {
+    console.error('Class attendance action error:', error);
+    Alert.alert(
+      'Error',
+      error.message || 'An error occurred while recording class attendance',
+      [{ text: 'OK' }]
+    );
+  } finally {
+    setActionLoading(null);
+  }
+};
+
 
   const handleAttendanceAction = async (
     type: 'work_checkin' | 'work_checkout' | 'class_checkin' | 'class_checkout',
@@ -366,6 +490,177 @@ const calculateStats = (data: AttendanceResponse) => {
   const todayAttendance = attendanceData?.today?.work_attendance;
   const todayClasses = attendanceData?.today?.class_attendance || [];
 
+const renderClassAttendance = () => {
+  const todayClasses = attendanceData?.today?.class_attendance || [];
+  const activeClassSession = attendanceData?.today?.active_class_session;
+  
+  // Check if user is checked into work
+  const canCheckIntoClass = attendanceData?.today?.is_checked_in && !activeClassSession;
+  
+  return (
+    <View style={styles.section}>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>Today's Classes</Text>
+        <TouchableOpacity 
+          style={styles.viewAllButton}
+          onPress={() => {
+            // Navigate to classes tab
+            console.log('Navigate to classes tab');
+          }}
+        >
+          <Text style={styles.viewAllText}>View All</Text>
+          <Ionicons name="chevron-forward" size={16} color={COLORS.primary} />
+        </TouchableOpacity>
+      </View>
+      
+      {/* Active Class Session Indicator */}
+      {activeClassSession && (
+        <View style={styles.activeClassBanner}>
+          <View style={styles.activeClassInfo}>
+            <View style={styles.activeDot} />
+            <Text style={styles.activeClassText}>
+              Active: {activeClassSession.class_name || 'Class Session'}
+            </Text>
+            <Text style={styles.activeClassTime}>
+              Since {new Date(activeClassSession.check_in_time).toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+            </Text>
+          </View>
+          <Button
+            title="Check Out"
+            onPress={() => handleClassCheckOut(activeClassSession.class_id)}
+            loading={actionLoading === 'class_checkout'}
+            variant="secondary"
+            size="small"
+            style={styles.checkOutButton}
+          />
+        </View>
+      )}
+      
+      {/* Classes Summary Stats */}
+      {todayClasses.length > 0 && (
+        <View style={styles.classesSummary}>
+          <View style={styles.summaryItem}>
+            <Text style={styles.summaryValue}>
+              {todayClasses.filter((c: any) => c.check_in_time && !c.check_out_time).length}
+            </Text>
+            <Text style={styles.summaryLabel}>Active</Text>
+          </View>
+          <View style={styles.summaryItem}>
+            <Text style={styles.summaryValue}>
+              {todayClasses.filter((c: any) => c.check_out_time).length}
+            </Text>
+            <Text style={styles.summaryLabel}>Completed</Text>
+          </View>
+          <View style={styles.summaryItem}>
+            <Text style={styles.summaryValue}>
+              {todayClasses.length}
+            </Text>
+            <Text style={styles.summaryLabel}>Total</Text>
+          </View>
+        </View>
+      )}
+      
+      {/* Class Cards */}
+      {todayClasses.length > 0 ? (
+        todayClasses.slice(0, 3).map((classAttendance: any, index: number) => (
+          <View key={classAttendance.id || index} style={styles.classCard}>
+            <View style={styles.classCardHeader}>
+              <View style={styles.classCardInfo}>
+                <Text style={styles.className}>
+                  {classAttendance.class?.name || 'Unknown Class'}
+                </Text>
+                <Text style={styles.classCode}>
+                  {classAttendance.class?.code || ''}
+                </Text>
+                {classAttendance.class?.duration_hours && (
+                  <Text style={styles.classDuration}>
+                    Duration: {classAttendance.class.duration_hours}h
+                  </Text>
+                )}
+              </View>
+              
+              <View style={styles.classCardStatus}>
+                <View style={[
+                  styles.classStatusBadge,
+                  { 
+                    backgroundColor: classAttendance.check_out_time 
+                      ? COLORS.primary 
+                      : classAttendance.check_in_time 
+                      ? COLORS.success 
+                      : COLORS.gray[300]
+                  }
+                ]}>
+                  <Text style={styles.classStatusText}>
+                    {classAttendance.check_out_time 
+                      ? 'Completed' 
+                      : classAttendance.check_in_time 
+                      ? 'Active' 
+                      : 'Pending'
+                    }
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Class Times */}
+            {(classAttendance.check_in_time || classAttendance.check_out_time) && (
+              <View style={styles.classTimesRow}>
+                {classAttendance.check_in_time && (
+                  <View style={styles.classTimeItem}>
+                    <Ionicons name="log-in" size={14} color={COLORS.success} />
+                    <Text style={styles.classTimeLabel}>In:</Text>
+                    <Text style={styles.classTimeValue}>
+                      {new Date(classAttendance.check_in_time).toLocaleTimeString('en-US', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </Text>
+                  </View>
+                )}
+                
+                {classAttendance.check_out_time && (
+                  <View style={styles.classTimeItem}>
+                    <Ionicons name="log-out" size={14} color={COLORS.error} />
+                    <Text style={styles.classTimeLabel}>Out:</Text>
+                    <Text style={styles.classTimeValue}>
+                      {new Date(classAttendance.check_out_time).toLocaleTimeString('en-US', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
+          </View>
+        ))
+      ) : (
+        <View style={styles.emptyClasses}>
+          <Ionicons name="school-outline" size={48} color={COLORS.gray[400]} />
+          <Text style={styles.emptyText}>
+            {!attendanceData?.today?.is_checked_in 
+              ? 'Check into work to start class attendance'
+              : 'No class attendance recorded today'}
+          </Text>
+        </View>
+      )}
+      
+      {/* Show More Classes Indicator */}
+      {todayClasses.length > 3 && (
+        <TouchableOpacity style={styles.showMoreClasses}>
+          <Text style={styles.showMoreText}>
+            +{todayClasses.length - 3} more classes
+          </Text>
+          <Ionicons name="chevron-forward" size={16} color={COLORS.primary} />
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+};
+  
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="dark" />
@@ -779,8 +1074,41 @@ const styles = StyleSheet.create({
     marginTop: LAYOUT.spacing.sm,
   },
 
+   classCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: LAYOUT.borderRadius.base,
+    padding: LAYOUT.padding.base,
+    marginBottom: LAYOUT.spacing.base,
+    ...LAYOUT.shadow.sm,
+  },
+
+  className: {
+    fontSize: TYPOGRAPHY.fontSize.base,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.text.primary,
+  },
+
+  classCode: {
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.text.secondary,
+  },
+
   classActionButton: {
     flex: 1,
+  },
+
+  emptyClasses: {
+    alignItems: 'center',
+    padding: LAYOUT.padding.lg,
+    backgroundColor: COLORS.surface,
+    borderRadius: LAYOUT.borderRadius.base,
+  },
+
+  emptyText: {
+    fontSize: TYPOGRAPHY.fontSize.base,
+    color: COLORS.text.secondary,
+    marginTop: LAYOUT.spacing.base,
+    textAlign: 'center',
   },
 
   showMoreClasses: {
@@ -798,13 +1126,6 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontWeight: TYPOGRAPHY.fontWeight.medium,
     marginRight: 4,
-  },
-
-  emptyClasses: {
-    alignItems: 'center',
-    padding: LAYOUT.padding.lg,
-    backgroundColor: COLORS.surface,
-    borderRadius: LAYOUT.borderRadius.base,
   },
 
   container: {
@@ -925,6 +1246,49 @@ const styles = StyleSheet.create({
     fontWeight: TYPOGRAPHY.fontWeight.medium,
     color: COLORS.text.primary,
   },
+
+   activeClassBanner: {
+    backgroundColor: COLORS.success + '15',
+    borderRadius: LAYOUT.borderRadius.base,
+    padding: LAYOUT.padding.base,
+    marginBottom: LAYOUT.spacing.base,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.success + '30',
+  },
+
+    activeClassInfo: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+
+  activeDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.success,
+    // Add pulsing animation if you want
+  },
+
+   activeClassText: {
+    fontSize: TYPOGRAPHY.fontSize.base,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    color: COLORS.text.primary,
+    flex: 1,
+  },
+
+  activeClassTime: {
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.text.secondary,
+  },
+
+  checkOutButton: {
+    marginLeft: LAYOUT.spacing.sm,
+  },
   
   timeText: {
     fontSize: TYPOGRAPHY.fontSize.sm,
@@ -940,31 +1304,12 @@ const styles = StyleSheet.create({
   actionButton: {
     flex: 1,
   },
-  
-  classCard: {
-    backgroundColor: COLORS.surface,
-    borderRadius: LAYOUT.borderRadius.base,
-    padding: LAYOUT.padding.base,
-    marginBottom: LAYOUT.spacing.base,
-    ...LAYOUT.shadow.sm,
-  },
-  
+ 
   classHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: LAYOUT.spacing.base,
-  },
-  
-  className: {
-    fontSize: TYPOGRAPHY.fontSize.base,
-    fontWeight: TYPOGRAPHY.fontWeight.semibold,
-    color: COLORS.text.primary,
-  },
-  
-  classCode: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    color: COLORS.text.secondary,
   },
   
   classTimes: {
@@ -983,12 +1328,6 @@ const styles = StyleSheet.create({
   emptyState: {
     alignItems: 'center',
     padding: LAYOUT.padding.xl,
-  },
-  
-  emptyText: {
-    fontSize: TYPOGRAPHY.fontSize.base,
-    color: COLORS.text.secondary,
-    marginTop: LAYOUT.spacing.base,
   },
   
   quickActions: {

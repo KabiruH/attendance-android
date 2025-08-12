@@ -31,9 +31,16 @@ export interface AttendanceRequest {
 export interface AttendanceResponse {
   today: {
     work_attendance: Attendance | null;
-    class_attendance: ClassAttendance[];
     is_checked_in: boolean;
+    class_attendance: ClassAttendance[];
+    active_class_session?: {  // Add this optional property
+      id: number;
+      class_id: number;
+      check_in_time: Date | string;
+      class_name?: string;
+    } | null;
   };
   history: Attendance[];
+  classHistory?: ClassAttendance[];  // Add this optional property
   current_date: string;
 }

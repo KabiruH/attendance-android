@@ -12,6 +12,8 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Animated,
+  Dimensions,
 } from 'react-native';
 import { Button } from '../../components/ui/Button';
 import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
@@ -19,6 +21,8 @@ import { COLORS, LAYOUT, TYPOGRAPHY } from '../../constants';
 import { apiService } from '../../services/ApiService';
 import { BiometricService } from '../../services/BiometricService';
 import { LocationService } from '../../services/LocationService';
+
+const { width } = Dimensions.get('window');
 
 interface ClassItem {
   id: number;
@@ -45,10 +49,18 @@ export default function ClassesScreen() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [locationStatus, setLocationStatus] = useState<'unknown' | 'inside' | 'outside'>('unknown');
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'active' | 'completed'>('all');
+  const [fadeAnim] = useState(new Animated.Value(0));
 
   useEffect(() => {
     loadClasses();
     checkLocationStatus();
+    
+    // Fade in animation
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
   }, []);
 
   // Refresh data when screen comes into focus
@@ -178,6 +190,36 @@ export default function ClassesScreen() {
     }
   };
 
+  const getStatusColor = (classItem: ClassItem) => {
+    if (classItem.attendance_status.checked_out) return COLORS.primary;
+    if (classItem.attendance_status.checked_in) return COLORS.success;
+    return COLORS.gray[400];
+  };
+
+  const getStatusIcon = (classItem: ClassItem) => {
+    if (classItem.attendance_status.checked_out) return 'checkmark-circle';
+    if (classItem.attendance_status.checked_in) return 'time';
+    return 'ellipse-outline';
+  };
+
+  const formatTime = (timeString: string) => {
+    return new Date(timeString).toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  const calculateDuration = (checkIn: string, checkOut?: string) => {
+    const start = new Date(checkIn);
+    const end = checkOut ? new Date(checkOut) : new Date();
+    const duration = Math.floor((end.getTime() - start.getTime()) / (1000 * 60));
+    
+    if (duration < 60) return `${duration}m`;
+    const hours = Math.floor(duration / 60);
+    const minutes = duration % 60;
+    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+  };
+
   const filteredClasses = getFilteredClasses();
   const stats = {
     total: classes.length,
@@ -201,198 +243,267 @@ export default function ClassesScreen() {
     <SafeAreaView style={styles.container}>
       <StatusBar style="dark" />
       
-      {/* Header */}
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.title}>My Classes</Text>
-          <Text style={styles.subtitle}>{filteredClasses.length} classes</Text>
-        </View>
-        
-        {/* Location Status */}
-        <View style={[
-          styles.locationBadge,
-          { backgroundColor: locationStatus === 'inside' ? COLORS.success : COLORS.error }
-        ]}>
-          <Ionicons 
-            name={locationStatus === 'inside' ? 'location' : 'location-outline'} 
-            size={16} 
-            color={COLORS.white} 
-          />
-          <Text style={styles.locationText}>
-            {locationStatus === 'inside' ? 'On Campus' : 'Off Campus'}
-          </Text>
-        </View>
-      </View>
+      <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
+        {/* Enhanced Header */}
+        <View style={styles.header}>
+          <View style={styles.headerContent}>
+            <View style={styles.titleSection}>
+              <Text style={styles.title}>My Classes</Text>
+              <Text style={styles.subtitle}>
+                {filteredClasses.length} {filteredClasses.length === 1 ? 'class' : 'classes'}
+                {selectedFilter !== 'all' && ` • ${selectedFilter}`}
+              </Text>
+            </View>
+            
+            {/* Enhanced Location Status */}
+            <TouchableOpacity
+              style={[
+                styles.locationBadge,
+                { 
+                  backgroundColor: locationStatus === 'inside' 
+                    ? COLORS.success 
+                    : locationStatus === 'outside' 
+                      ? COLORS.error 
+                      : COLORS.gray[400] 
+                }
+              ]}
+              onPress={checkLocationStatus}
+              activeOpacity={0.7}
+            >
+              <Ionicons 
+                name={locationStatus === 'inside' ? 'location' : 'location-outline'} 
+                size={14} 
+                color={COLORS.white} 
+              />
+              <Text style={styles.locationText}>
+                {locationStatus === 'inside' ? 'On Campus' : 
+                 locationStatus === 'outside' ? 'Off Campus' : 'Checking...'}
+              </Text>
+              <Ionicons name="refresh" size={12} color={COLORS.white} />
+            </TouchableOpacity>
+          </View>
 
-      {/* Stats */}
-      <View style={styles.statsContainer}>
-        <View style={styles.statItem}>
-          <Text style={styles.statValue}>{stats.total}</Text>
-          <Text style={styles.statLabel}>Total</Text>
-        </View>
-        <View style={styles.statItem}>
-          <Text style={[styles.statValue, { color: COLORS.success }]}>{stats.active}</Text>
-          <Text style={styles.statLabel}>Active</Text>
-        </View>
-        <View style={styles.statItem}>
-          <Text style={[styles.statValue, { color: COLORS.primary }]}>{stats.completed}</Text>
-          <Text style={styles.statLabel}>Completed</Text>
-        </View>
-        <View style={styles.statItem}>
-          <Text style={[styles.statValue, { color: COLORS.gray[500] }]}>{stats.notStarted}</Text>
-          <Text style={styles.statLabel}>Not Started</Text>
-        </View>
-      </View>
-
-      {/* Filter Buttons */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterContainer}>
-        {[
-          { key: 'all', label: 'All Classes', count: stats.total },
-          { key: 'active', label: 'Active', count: stats.active },
-          { key: 'completed', label: 'Completed', count: stats.completed },
-        ].map((filter) => (
-          <TouchableOpacity
-            key={filter.key}
-            style={[
-              styles.filterButton,
-              selectedFilter === filter.key && styles.filterButtonActive
-            ]}
-            onPress={() => setSelectedFilter(filter.key as any)}
-          >
-            <Text style={[
-              styles.filterButtonText,
-              selectedFilter === filter.key && styles.filterButtonTextActive
-            ]}>
-              {filter.label} ({filter.count})
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-
-      {/* Classes List */}
-      <ScrollView
-        style={styles.scrollView}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-      >
-        {filteredClasses.length > 0 ? (
-          filteredClasses.map((classItem) => (
-            <View key={classItem.id} style={styles.classCard}>
-              {/* Class Header */}
-              <View style={styles.classHeader}>
-                <View style={styles.classInfo}>
-                  <Text style={styles.className}>{classItem.name}</Text>
-                  <Text style={styles.classCode}>{classItem.code}</Text>
-                  <Text style={styles.classDepartment}>{classItem.department}</Text>
-                  {classItem.description && (
-                    <Text style={styles.classDescription}>{classItem.description}</Text>
-                  )}
+          {/* Enhanced Stats Cards */}
+          <View style={styles.statsContainer}>
+            {[
+              { key: 'active', value: stats.active, label: 'Active', color: COLORS.success, icon: 'play-circle' },
+              { key: 'completed', value: stats.completed, label: 'Completed', color: COLORS.primary, icon: 'checkmark-circle' },
+              { key: 'notStarted', value: stats.notStarted, label: 'Pending', color: COLORS.gray[500], icon: 'time-outline' },
+              { key: 'total', value: stats.total, label: 'Total', color: COLORS.text.primary, icon: 'library-outline' },
+            ].map((stat, index) => (
+              <View key={stat.key} style={[styles.statCard, index === 0 && styles.statCardFirst]}>
+                <View style={styles.statIconContainer}>
+                  <Ionicons name={stat.icon as any} size={20} color={stat.color} />
                 </View>
-                
-                <View style={styles.classStatus}>
-                  <Text style={styles.durationText}>
-                    {classItem.duration_hours}h
+                <Text style={[styles.statValue, { color: stat.color }]}>{stat.value}</Text>
+                <Text style={styles.statLabel}>{stat.label}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        {/* Enhanced Filter Tabs */}
+        <View style={styles.filterContainer}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterScrollContent}>
+            {[
+              { key: 'all', label: 'All Classes', count: stats.total, icon: 'library-outline' },
+              { key: 'active', label: 'Active', count: stats.active, icon: 'play-circle' },
+              { key: 'completed', label: 'Completed', count: stats.completed, icon: 'checkmark-circle' },
+            ].map((filter) => (
+              <TouchableOpacity
+                key={filter.key}
+                style={[
+                  styles.filterTab,
+                  selectedFilter === filter.key && styles.filterTabActive
+                ]}
+                onPress={() => setSelectedFilter(filter.key as any)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.filterTabContent}>
+                  <Ionicons 
+                    name={filter.icon as any} 
+                    size={16} 
+                    color={selectedFilter === filter.key ? COLORS.white : COLORS.text.secondary} 
+                  />
+                  <Text style={[
+                    styles.filterTabText,
+                    selectedFilter === filter.key && styles.filterTabTextActive
+                  ]}>
+                    {filter.label}
                   </Text>
                   <View style={[
-                    styles.statusBadge,
-                    { 
-                      backgroundColor: classItem.attendance_status.checked_in
-                        ? (classItem.attendance_status.checked_out ? COLORS.primary : COLORS.success)
-                        : COLORS.gray[300]
-                    }
+                    styles.filterBadge,
+                    selectedFilter === filter.key && styles.filterBadgeActive
                   ]}>
-                    <Text style={styles.statusText}>
+                    <Text style={[
+                      styles.filterBadgeText,
+                      selectedFilter === filter.key && styles.filterBadgeTextActive
+                    ]}>
+                      {filter.count}
+                    </Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+
+        {/* Enhanced Classes List */}
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+          showsVerticalScrollIndicator={false}
+        >
+          {filteredClasses.length > 0 ? (
+            filteredClasses.map((classItem, index) => (
+              <View key={classItem.id} style={[styles.classCard, { marginTop: index === 0 ? 0 : LAYOUT.spacing.base }]}>
+                {/* Enhanced Class Header */}
+                <View style={styles.classHeader}>
+                  <View style={styles.classMainInfo}>
+                    <View style={styles.classStatusIndicator}>
+                      <View style={[styles.statusDot, { backgroundColor: getStatusColor(classItem) }]} />
+                      <Ionicons 
+                        name={getStatusIcon(classItem)} 
+                        size={20} 
+                        color={getStatusColor(classItem)} 
+                      />
+                    </View>
+                    
+                    <View style={styles.classDetails}>
+                      <Text style={styles.className}>{classItem.name}</Text>
+                      <View style={styles.classMetaRow}>
+                        <Text style={styles.classCode}>{classItem.code}</Text>
+                        <View style={styles.separator} />
+                        <Text style={styles.classDepartment}>{classItem.department}</Text>
+                        <View style={styles.separator} />
+                        <Text style={styles.durationText}>{classItem.duration_hours}h</Text>
+                      </View>
+                      {classItem.description && (
+                        <Text style={styles.classDescription} numberOfLines={2}>
+                          {classItem.description}
+                        </Text>
+                      )}
+                    </View>
+                  </View>
+                  
+                  <View style={[
+                    styles.statusChip,
+                    { backgroundColor: `${getStatusColor(classItem)}15` }
+                  ]}>
+                    <Text style={[styles.statusChipText, { color: getStatusColor(classItem) }]}>
                       {classItem.attendance_status.status}
                     </Text>
                   </View>
                 </View>
-              </View>
-              
-              {/* Attendance Info */}
-              {(classItem.attendance_status.check_in_time || classItem.attendance_status.check_out_time) && (
-                <View style={styles.attendanceInfo}>
-                  <View style={styles.timeRow}>
-                    {classItem.attendance_status.check_in_time && (
-                      <View style={styles.timeItem}>
-                        <Ionicons name="log-in" size={16} color={COLORS.success} />
-                        <Text style={styles.timeLabel}>In:</Text>
-                        <Text style={styles.timeValue}>
-                          {new Date(classItem.attendance_status.check_in_time).toLocaleTimeString('en-US', {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </Text>
-                      </View>
-                    )}
-                    
-                    {classItem.attendance_status.check_out_time && (
-                      <View style={styles.timeItem}>
-                        <Ionicons name="log-out" size={16} color={COLORS.error} />
-                        <Text style={styles.timeLabel}>Out:</Text>
-                        <Text style={styles.timeValue}>
-                          {new Date(classItem.attendance_status.check_out_time).toLocaleTimeString('en-US', {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </Text>
-                      </View>
-                    )}
-                  </View>
-                </View>
-              )}
-
-              {/* Action Buttons */}
-              <View style={styles.buttonRow}>
-                <Button
-                  title="Check In"
-                  onPress={() => handleClassAttendance(classItem.id, classItem.name, 'class_checkin')}
-                  disabled={
-                    !!classItem.attendance_status.check_in_time || 
-                    locationStatus !== 'inside' ||
-                    actionLoading === `class_checkin_${classItem.id}`
-                  }
-                  loading={actionLoading === `class_checkin_${classItem.id}`}
-                  variant="success"
-                  size="small"
-                  style={styles.actionButton}
-                />
                 
-                <Button
-                  title="Check Out"
-                  onPress={() => handleClassAttendance(classItem.id, classItem.name, 'class_checkout')}
-                  disabled={
-                    !classItem.attendance_status.check_in_time || 
-                    !!classItem.attendance_status.check_out_time ||
-                    locationStatus !== 'inside' ||
-                    actionLoading === `class_checkout_${classItem.id}`
-                  }
-                  loading={actionLoading === `class_checkout_${classItem.id}`}
-                  variant="error"
-                  size="small"
-                  style={styles.actionButton}
-                />
+                {/* Enhanced Attendance Timeline */}
+                {(classItem.attendance_status.check_in_time || classItem.attendance_status.check_out_time) && (
+                  <View style={styles.attendanceTimeline}>
+                    <View style={styles.timelineContainer}>
+                      {classItem.attendance_status.check_in_time && (
+                        <View style={styles.timelineItem}>
+                          <View style={[styles.timelineIcon, { backgroundColor: COLORS.success }]}>
+                            <Ionicons name="log-in" size={14} color={COLORS.white} />
+                          </View>
+                          <View style={styles.timelineContent}>
+                            <Text style={styles.timelineLabel}>Checked In</Text>
+                            <Text style={styles.timelineTime}>
+                              {formatTime(classItem.attendance_status.check_in_time)}
+                            </Text>
+                          </View>
+                        </View>
+                      )}
+                      
+                      {classItem.attendance_status.check_out_time && (
+                        <View style={styles.timelineItem}>
+                          <View style={[styles.timelineIcon, { backgroundColor: COLORS.error }]}>
+                            <Ionicons name="log-out" size={14} color={COLORS.white} />
+                          </View>
+                          <View style={styles.timelineContent}>
+                            <Text style={styles.timelineLabel}>Checked Out</Text>
+                            <Text style={styles.timelineTime}>
+                              {formatTime(classItem.attendance_status.check_out_time)}
+                            </Text>
+                          </View>
+                        </View>
+                      )}
+                      
+                      {classItem.attendance_status.check_in_time && (
+                        <View style={styles.durationChip}>
+                          <Ionicons name="time-outline" size={12} color={COLORS.text.secondary} />
+                          <Text style={styles.durationChipText}>
+                            {calculateDuration(
+                              classItem.attendance_status.check_in_time,
+                              classItem.attendance_status.check_out_time
+                            )}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                )}
+
+                {/* Enhanced Action Buttons */}
+                <View style={styles.actionSection}>
+                  <Button
+                    title={actionLoading === `class_checkin_${classItem.id}` ? "Checking In..." : "Check In"}
+                    onPress={() => handleClassAttendance(classItem.id, classItem.name, 'class_checkin')}
+                    disabled={
+                      !!classItem.attendance_status.check_in_time || 
+                      locationStatus !== 'inside' ||
+                      actionLoading === `class_checkin_${classItem.id}`
+                    }
+                    loading={actionLoading === `class_checkin_${classItem.id}`}
+                    variant="success"
+                    size="small"
+                    style={StyleSheet.flatten([styles.actionButton, { flex: 1 }])}
+                  />
+                  
+                  <Button
+                    title={actionLoading === `class_checkout_${classItem.id}` ? "Checking Out..." : "Check Out"}
+                    onPress={() => handleClassAttendance(classItem.id, classItem.name, 'class_checkout')}
+                    disabled={
+                      !classItem.attendance_status.check_in_time || 
+                      !!classItem.attendance_status.check_out_time ||
+                      locationStatus !== 'inside' ||
+                      actionLoading === `class_checkout_${classItem.id}`
+                    }
+                    loading={actionLoading === `class_checkout_${classItem.id}`}
+                    variant="error"
+                    size="small"
+                    style={StyleSheet.flatten([styles.actionButton, { flex: 1 }])}
+                  />
+                </View>
               </View>
+            ))
+          ) : (
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIconContainer}>
+                <Ionicons name="school-outline" size={48} color={COLORS.gray[400]} />
+              </View>
+              <Text style={styles.emptyTitle}>
+                {selectedFilter === 'all' 
+                  ? 'No Classes Assigned'
+                  : `No ${selectedFilter.charAt(0).toUpperCase() + selectedFilter.slice(1)} Classes`
+                }
+              </Text>
+              <Text style={styles.emptyDescription}>
+                {selectedFilter === 'all' 
+                  ? 'Contact your administrator to get assigned to classes, or pull down to refresh.'
+                  : `Try selecting "All Classes" to see your complete class list, or change your filter selection.`
+                }
+              </Text>
+              <TouchableOpacity style={styles.refreshButton} onPress={onRefresh}>
+                <Ionicons name="refresh" size={16} color={COLORS.primary} />
+                <Text style={styles.refreshButtonText}>Refresh</Text>
+              </TouchableOpacity>
             </View>
-          ))
-        ) : (
-          <View style={styles.emptyState}>
-            <Ionicons name="school-outline" size={64} color={COLORS.gray[400]} />
-            <Text style={styles.emptyText}>
-              {selectedFilter === 'all' 
-                ? 'No classes assigned'
-                : `No ${selectedFilter} classes`
-              }
-            </Text>
-            <Text style={styles.emptySubtext}>
-              {selectedFilter === 'all' 
-                ? 'Contact your administrator to get assigned to classes'
-                : `Check the "All Classes" filter to see your complete class list`
-              }
-            </Text>
-          </View>
-        )}
-      </ScrollView>
+          )}
+        </ScrollView>
+      </Animated.View>
     </SafeAreaView>
   );
 }
@@ -400,7 +511,11 @@ export default function ClassesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.gray[50] || '#f8f9fa',
+  },
+  
+  content: {
+    flex: 1,
   },
   
   centerContent: {
@@ -410,109 +525,76 @@ const styles = StyleSheet.create({
   },
 
   header: {
+    backgroundColor: COLORS.surface,
+    paddingTop: LAYOUT.padding.base,
+    paddingBottom: LAYOUT.padding.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.gray[200],
+    shadowColor: COLORS.black,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+
+  headerContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    padding: LAYOUT.padding.base,
-    backgroundColor: COLORS.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray[200],
+    paddingHorizontal: LAYOUT.padding.base,
+    marginBottom: LAYOUT.spacing.base,
+  },
+
+  titleSection: {
+    flex: 1,
   },
 
   title: {
-    fontSize: TYPOGRAPHY.fontSize['2xl'],
+    fontSize: TYPOGRAPHY.fontSize['3xl'] || 30,
     fontWeight: TYPOGRAPHY.fontWeight.bold,
     color: COLORS.text.primary,
+    letterSpacing: -0.5,
   },
 
   subtitle: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontSize: TYPOGRAPHY.fontSize.base,
     color: COLORS.text.secondary,
-    marginTop: 2,
+    marginTop: 4,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
   },
 
   locationBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 6,
+    shadowColor: COLORS.black,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
   },
 
   locationText: {
     color: COLORS.white,
-    fontSize: TYPOGRAPHY.fontSize.xs,
-    fontWeight: TYPOGRAPHY.fontWeight.medium,
-    marginLeft: 4,
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
   },
 
   statsContainer: {
     flexDirection: 'row',
-    backgroundColor: COLORS.surface,
     paddingHorizontal: LAYOUT.padding.base,
-    paddingVertical: LAYOUT.padding.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray[200],
+    gap: LAYOUT.spacing.sm,
   },
 
-  statItem: {
+  statCard: {
     flex: 1,
-    alignItems: 'center',
-  },
-
-  statValue: {
-    fontSize: TYPOGRAPHY.fontSize.lg,
-    fontWeight: TYPOGRAPHY.fontWeight.bold,
-    color: COLORS.text.primary,
-  },
-
-  statLabel: {
-    fontSize: TYPOGRAPHY.fontSize.xs,
-    color: COLORS.text.secondary,
-    marginTop: 2,
-    textAlign: 'center',
-  },
-
-  filterContainer: {
-    backgroundColor: COLORS.surface,
-    paddingHorizontal: LAYOUT.padding.base,
-    paddingVertical: LAYOUT.padding.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.gray[200],
-  },
-
-  filterButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: COLORS.gray[100],
-    marginRight: 8,
-  },
-
-  filterButtonActive: {
-    backgroundColor: COLORS.primary,
-  },
-
-  filterButtonText: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    fontWeight: TYPOGRAPHY.fontWeight.medium,
-    color: COLORS.text.secondary,
-  },
-
-  filterButtonTextActive: {
-    color: COLORS.white,
-  },
-
-  scrollView: {
-    flex: 1,
-    padding: LAYOUT.padding.base,
-  },
-
-  classCard: {
-    backgroundColor: COLORS.surface,
+    backgroundColor: COLORS.white,
+    padding: LAYOUT.padding.sm,
     borderRadius: LAYOUT.borderRadius.lg,
-    padding: LAYOUT.padding.base,
-    marginBottom: LAYOUT.spacing.base,
+    alignItems: 'center',
     shadowColor: COLORS.black,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
@@ -520,122 +602,326 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
 
-  classHeader: {
+  statCardFirst: {
+    // Add any special styling for first card if needed
+  },
+
+  statIconContainer: {
+    marginBottom: 4,
+  },
+
+  statValue: {
+    fontSize: TYPOGRAPHY.fontSize.xl,
+    fontWeight: TYPOGRAPHY.fontWeight.bold,
+    marginBottom: 2,
+  },
+
+  statLabel: {
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.text.secondary,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    textAlign: 'center',
+  },
+
+  filterContainer: {
+    backgroundColor: COLORS.surface,
+    paddingVertical: LAYOUT.padding.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.gray[200],
+  },
+
+  filterScrollContent: {
+    paddingHorizontal: LAYOUT.padding.base,
+  },
+
+  filterTab: {
+    marginRight: LAYOUT.spacing.sm,
+    borderRadius: 25,
+    backgroundColor: COLORS.gray[100],
+    shadowColor: COLORS.black,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+
+  filterTabActive: {
+    backgroundColor: COLORS.primary,
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+
+  filterTabContent: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    gap: 8,
+  },
+
+  filterTabText: {
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.text.secondary,
+  },
+
+  filterTabTextActive: {
+    color: COLORS.white,
+  },
+
+  filterBadge: {
+    backgroundColor: COLORS.gray[200],
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    minWidth: 20,
+    alignItems: 'center',
+  },
+
+  filterBadgeActive: {
+    backgroundColor: COLORS.white + '30',
+  },
+
+  filterBadgeText: {
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    fontWeight: TYPOGRAPHY.fontWeight.bold,
+    color: COLORS.text.secondary,
+  },
+
+  filterBadgeTextActive: {
+    color: COLORS.white,
+  },
+
+  scrollView: {
+    flex: 1,
+  },
+
+  scrollContent: {
+    padding: LAYOUT.padding.base,
+    paddingBottom: LAYOUT.padding.xl,
+  },
+
+  classCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: LAYOUT.borderRadius.xl,
+    padding: LAYOUT.padding.base,
+    shadowColor: COLORS.black,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: COLORS.gray[100],
+  },
+
+  classHeader: {
     marginBottom: LAYOUT.spacing.base,
   },
 
-  classInfo: {
+  classMainInfo: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: LAYOUT.spacing.sm,
+  },
+
+  classStatusIndicator: {
+    alignItems: 'center',
+    marginRight: LAYOUT.spacing.sm,
+    position: 'relative',
+  },
+
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    borderWidth: 2,
+    borderColor: COLORS.white,
+  },
+
+  classDetails: {
     flex: 1,
-    marginRight: LAYOUT.spacing.base,
   },
 
   className: {
-    fontSize: TYPOGRAPHY.fontSize.base,
-    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    fontSize: TYPOGRAPHY.fontSize.lg,
+    fontWeight: TYPOGRAPHY.fontWeight.bold,
     color: COLORS.text.primary,
+    marginBottom: 4,
+    lineHeight: 24,
+  },
+
+  classMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
   },
 
   classCode: {
     fontSize: TYPOGRAPHY.fontSize.sm,
-    color: COLORS.text.secondary,
-    marginTop: 2,
+    color: COLORS.primary,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+  },
+
+  separator: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: COLORS.gray[400],
+    marginHorizontal: 8,
   },
 
   classDepartment: {
-    fontSize: TYPOGRAPHY.fontSize.xs,
-    color: COLORS.text.light,
-    marginTop: 2,
-  },
-
-  classDescription: {
     fontSize: TYPOGRAPHY.fontSize.sm,
     color: COLORS.text.secondary,
-    marginTop: 4,
-    fontStyle: 'italic',
-  },
-
-  classStatus: {
-    alignItems: 'flex-end',
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
   },
 
   durationText: {
     fontSize: TYPOGRAPHY.fontSize.sm,
     color: COLORS.text.secondary,
-    marginBottom: 4,
-  },
-
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-
-  statusText: {
-    fontSize: TYPOGRAPHY.fontSize.xs,
     fontWeight: TYPOGRAPHY.fontWeight.medium,
-    color: COLORS.white,
   },
 
-  attendanceInfo: {
-    paddingTop: LAYOUT.spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.gray[200],
+  classDescription: {
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.text.light,
+    fontStyle: 'italic',
+    lineHeight: 20,
+  },
+
+  statusChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    alignSelf: 'flex-start',
+  },
+
+  statusChipText: {
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    fontWeight: TYPOGRAPHY.fontWeight.bold,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+
+  attendanceTimeline: {
+    backgroundColor: COLORS.gray[50],
+    borderRadius: LAYOUT.borderRadius.lg,
+    padding: LAYOUT.padding.sm,
     marginBottom: LAYOUT.spacing.base,
   },
 
-  timeRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  timelineContainer: {
+    gap: LAYOUT.spacing.sm,
   },
 
-  timeItem: {
+  timelineItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: LAYOUT.spacing.sm,
+  },
+
+  timelineIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  timelineContent: {
     flex: 1,
   },
 
-  timeLabel: {
+  timelineLabel: {
     fontSize: TYPOGRAPHY.fontSize.sm,
-    color: COLORS.text.secondary,
-  },
-
-  timeValue: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
-    fontWeight: TYPOGRAPHY.fontWeight.medium,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
     color: COLORS.text.primary,
   },
 
-  buttonRow: {
+  timelineTime: {
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    color: COLORS.text.secondary,
+    marginTop: 2,
+  },
+
+  durationChip: {
     flexDirection: 'row',
-    gap: LAYOUT.spacing.base,
+    alignItems: 'center',
+    alignSelf: 'flex-end',
+    backgroundColor: COLORS.white,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+    marginTop: 4,
+  },
+
+  durationChipText: {
+    fontSize: TYPOGRAPHY.fontSize.xs,
+    color: COLORS.text.secondary,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
+  },
+
+  actionSection: {
+    flexDirection: 'row',
+    gap: LAYOUT.spacing.sm,
+    marginTop: 4,
   },
 
   actionButton: {
-    flex: 1,
+    borderRadius: LAYOUT.borderRadius.lg,
   },
 
   emptyState: {
     alignItems: 'center',
     padding: LAYOUT.padding.xl,
-    marginTop: LAYOUT.spacing.xl,
+    marginTop: LAYOUT.spacing.xl * 2,
   },
 
-  emptyText: {
-    fontSize: TYPOGRAPHY.fontSize.base,
-    fontWeight: TYPOGRAPHY.fontWeight.medium,
+  emptyIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: COLORS.gray[100],
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: LAYOUT.spacing.base,
+  },
+
+  emptyTitle: {
+    fontSize: TYPOGRAPHY.fontSize.lg,
+    fontWeight: TYPOGRAPHY.fontWeight.bold,
     color: COLORS.text.primary,
-    marginTop: LAYOUT.spacing.base,
+    marginBottom: LAYOUT.spacing.sm,
     textAlign: 'center',
   },
 
-  emptySubtext: {
-    fontSize: TYPOGRAPHY.fontSize.sm,
+  emptyDescription: {
+    fontSize: TYPOGRAPHY.fontSize.base,
     color: COLORS.text.secondary,
-    marginTop: LAYOUT.spacing.sm,
     textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: LAYOUT.spacing.lg,
+    paddingHorizontal: LAYOUT.padding.base,
+  },
+
+  refreshButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primary + '15',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    gap: 8,
+  },
+
+  refreshButtonText: {
+    fontSize: TYPOGRAPHY.fontSize.sm,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
+    color: COLORS.primary,
   },
 });

@@ -300,9 +300,25 @@ async getAttendanceStatus(): Promise<ApiResponse> {
   }
 
   // Classes methods
-  async getAssignedClasses(): Promise<ApiResponse> {
-    return this.get('/api/classes/assigned');
+ async getAssignedClasses(): Promise<ApiResponse> {
+  try {
+    console.log('📋 Fetching assigned classes...');
+    
+    // Get assigned classes from the classes endpoint
+    const response = await this.get('/api/classes/assigned');
+    
+    if (!response.success) {
+      // Fallback to getting from class-checkin endpoint
+      const classCheckInResponse = await this.get('/api/attendance/class-checkin');
+
+    }
+    
+    return response;
+  } catch (error) {
+    console.error('❌ getAssignedClasses error:', error);
+    return this.handleError(error);
   }
+}
 
   async getAllClasses(activeOnly: boolean = false): Promise<ApiResponse> {
     const endpoint = '/api/classes';
@@ -339,11 +355,56 @@ async getAttendanceStatus(): Promise<ApiResponse> {
     return this.delete(`/api/classes/${classId}`);
   }
 
-  async getClassAttendanceData(): Promise<ApiResponse> {
-    // You might need a separate endpoint for class attendance
-    // or extend the unified route to handle class attendance
-    return this.get('/api/attendance/mobile/class');
+ async getClassAttendanceData(): Promise<ApiResponse> {
+  try {
+    console.log('📚 Fetching class attendance data...');
+    
+    // Use the class-checkin endpoint to get class attendance data
+    const response = await this.get('/api/attendance/class-checkin');
+    
+    console.log('📚 Raw class attendance response:', JSON.stringify(response, null, 2));
+    
+    if (response.success && response.data) {
+      // The response should contain today's class attendance and history
+      return {
+        success: true,
+        data: response.data
+      };
+    }
+    
+    // If no data, return empty structure
+    return {
+      success: true,
+      data: {
+        today: {
+          class_attendance: [],
+          active_class_session: null
+        },
+        history: [],
+        current_date: new Date().toISOString().split('T')[0]
+      }
+    };
+  } catch (error) {
+    console.error('❌ getClassAttendanceData error:', error);
+    return this.handleError(error);
   }
+}
+
+async getClassAttendanceStatus(): Promise<ApiResponse> {
+  try {
+    console.log('📊 Fetching class attendance status...');
+    
+    // Use the class-status endpoint for detailed status
+    const response = await this.get('/api/attendance/class-status');
+    
+    console.log('📊 Class status response:', JSON.stringify(response, null, 2));
+    
+    return response;
+  } catch (error) {
+    console.error('❌ getClassAttendanceStatus error:', error);
+    return this.handleError(error);
+  }
+}
 
   // Class attendance methods - these might need separate endpoints
 async submitClassAttendance(attendanceData: {
@@ -357,8 +418,74 @@ async submitClassAttendance(attendanceData: {
   };
   biometric_verified: boolean;
 }): Promise<ApiResponse> {
-  // Use the unified class attendance endpoint
-  return this.post('/api/attendance/class-checkin', attendanceData);
+  try {
+    console.log('📤 Submitting class attendance:', attendanceData);
+    
+    // Submit to the class-checkin endpoint
+    const response = await this.post('/api/attendance/class-checkin', attendanceData);
+    
+    console.log('📥 Class attendance response:', response);
+    
+    return response;
+  } catch (error) {
+    console.error('❌ submitClassAttendance error:', error);
+    return this.handleError(error);
+  }
+}
+
+async getAllAttendanceData(): Promise<ApiResponse> {
+  try {
+    console.log('📊 Fetching all attendance data...');
+    
+    // Fetch both work and class attendance in parallel
+    const [workResponse, classResponse] = await Promise.all([
+      this.getAttendanceData(),
+      this.getClassAttendanceData()
+    ]);
+    
+    console.log('✅ Work attendance fetched:', workResponse.success);
+    console.log('✅ Class attendance fetched:', classResponse.success);
+    
+    if (workResponse.success && classResponse.success) {
+      // Combine the data
+      const combinedData = {
+        work: workResponse.data?.work || {
+          today: {
+            work_attendance: null,
+            is_checked_in: false
+          },
+          history: [],
+          current_date: new Date().toISOString().split('T')[0]
+        },
+        class: classResponse.data || {
+          today: {
+            class_attendance: [],
+            active_class_session: null
+          },
+          history: [],
+          current_date: new Date().toISOString().split('T')[0]
+        }
+      };
+      
+      return {
+        success: true,
+        data: combinedData
+      };
+    }
+    
+    // Return partial data if one fails
+    return {
+      success: false,
+      error: 'Failed to fetch complete attendance data',
+      data: {
+        work: workResponse.data?.work || null,
+        class: classResponse.data || null
+      }
+    };
+  } catch (error) {
+    console.error('❌ getAllAttendanceData error:', error);
+    return this.handleError(error);
+  }
 }
 
   async getClassAttendanceHistory(classId?: number): Promise<ApiResponse> {
@@ -367,6 +494,16 @@ async submitClassAttendance(attendanceData: {
       : '/api/attendance/class';
     return this.get(endpoint);
   }
+
+  // Refresh all attendance data after a check-in/out
+async refreshAllAttendanceData(): Promise<ApiResponse> {
+  console.log('🔄 Refreshing all attendance data...');
+  
+  // Add a small delay to ensure DB writes are complete
+  await new Promise(resolve => setTimeout(resolve, 500));
+  
+  return this.getAllAttendanceData();
+}
 
   // Biometric methods
   async enrollBiometric(biometricData: any): Promise<ApiResponse> {
