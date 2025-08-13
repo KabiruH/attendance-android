@@ -1,13 +1,20 @@
-// services/ApiService.ts - Updated to use unified attendance endpoint
-import axios, { AxiosInstance, AxiosResponse } from 'axios';
+// services/ApiService.ts - Updated with fallback support
+import axios, { AxiosInstance, AxiosResponse, AxiosError } from 'axios';
 import { API_CONFIG } from '../constants';
 import { ApiResponse, LoginRequest, LoginResponse } from '../types/index';
 import { StorageService } from './StorageService';
 
 class ApiService {
-  private api: AxiosInstance;
+  private api!: AxiosInstance;
+  private fallbackApi!: AxiosInstance;
 
   constructor() {
+    this.setupAxiosInstances();
+    this.setupInterceptors();
+  }
+
+  private setupAxiosInstances() {
+    // Primary API instance
     this.api = axios.create({
       baseURL: API_CONFIG.BASE_URL,
       timeout: API_CONFIG.TIMEOUT,
@@ -16,26 +23,53 @@ class ApiService {
       },
     });
 
+    // Fallback API instance (only in production)
+    if (API_CONFIG.IS_PROD) {
+      this.fallbackApi = axios.create({
+        baseURL: API_CONFIG.PROD_FALLBACK_URL,
+        timeout: API_CONFIG.FALLBACK_TIMEOUT || 5000,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+    }
+  }
+
+  private setupInterceptors() {
+    // Setup interceptors for primary API
+    this.setupInstanceInterceptors(this.api, 'primary');
+    
+    // Setup interceptors for fallback API if it exists
+    if (this.fallbackApi) {
+      this.setupInstanceInterceptors(this.fallbackApi, 'fallback');
+    }
+  }
+
+  private setupInstanceInterceptors(instance: AxiosInstance, type: 'primary' | 'fallback') {
     // Request interceptor to add auth token
-    this.api.interceptors.request.use(
+    instance.interceptors.request.use(
       async (config) => {
         const token = await StorageService.getUserToken();
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
         }
+        console.log(`📡 ${type} API request to:`, config.url);
         return config;
       },
       (error) => {
-        console.error('Request interceptor error:', error);
+        console.error(`❌ ${type} request interceptor error:`, error);
         return Promise.reject(error);
       }
     );
 
     // Response interceptor for error handling
-    this.api.interceptors.response.use(
-      (response: AxiosResponse) => response,
+    instance.interceptors.response.use(
+      (response: AxiosResponse) => {
+        console.log(`✅ ${type} API response success:`, response.config.url);
+        return response;
+      },
       async (error) => {
-        console.error('API Error:', error.response?.data || error.message);
+        console.error(`❌ ${type} API Error:`, error.response?.data || error.message);
 
         // Handle token expiration
         if (error.response?.status === 401) {
@@ -48,41 +82,144 @@ class ApiService {
     );
   }
 
-  // Generic API methods
-  async get<T>(endpoint: string): Promise<ApiResponse<T>> {
+  // Core request method with fallback logic
+  private async makeRequestWithFallback<T>(
+    method: 'get' | 'post' | 'put' | 'delete',
+    endpoint: string,
+    data?: any
+  ): Promise<ApiResponse<T>> {
     try {
-      const response = await this.api.get(endpoint);
+      // Try primary server first
+      console.log(`🎯 Attempting ${method.toUpperCase()} to primary server:`, endpoint);
+      let response: AxiosResponse;
+
+      switch (method) {
+        case 'get':
+          response = await this.api.get(endpoint);
+          break;
+        case 'post':
+          response = await this.api.post(endpoint, data);
+          break;
+        case 'put':
+          response = await this.api.put(endpoint, data);
+          break;
+        case 'delete':
+          response = await this.api.delete(endpoint);
+          break;
+      }
+
+      // If we reach here, primary succeeded
+      if (API_CONFIG.isUsingFallback) {
+        console.log('🔄 Primary server recovered, resetting to primary');
+        API_CONFIG.resetToPrimary();
+      }
+
       return response.data;
-    } catch (error: any) {
-      return this.handleError(error);
+    } catch (primaryError: any) {
+      console.log(`❌ Primary server failed for ${endpoint}:`, primaryError.message);
+
+      // Only try fallback in production and if fallback API exists
+      if (API_CONFIG.IS_PROD && this.fallbackApi && !API_CONFIG.isUsingFallback) {
+        try {
+          console.log(`🔄 Trying fallback server for ${endpoint}`);
+          API_CONFIG.switchToFallback();
+
+          let fallbackResponse: AxiosResponse;
+
+          switch (method) {
+            case 'get':
+              fallbackResponse = await this.fallbackApi.get(endpoint);
+              break;
+            case 'post':
+              fallbackResponse = await this.fallbackApi.post(endpoint, data);
+              break;
+            case 'put':
+              fallbackResponse = await this.fallbackApi.put(endpoint, data);
+              break;
+            case 'delete':
+              fallbackResponse = await this.fallbackApi.delete(endpoint);
+              break;
+          }
+
+          console.log('✅ Fallback server succeeded');
+          return fallbackResponse.data;
+        } catch (fallbackError: any) {
+          console.error('❌ Fallback server also failed:', fallbackError.message);
+          API_CONFIG.resetToPrimary(); // Reset for next attempt
+          return this.handleError(fallbackError);
+        }
+      } else {
+        // In development or if already using fallback, just handle the error
+        return this.handleError(primaryError);
+      }
     }
+  }
+
+  // Updated generic API methods to use fallback
+  async get<T>(endpoint: string): Promise<ApiResponse<T>> {
+    return this.makeRequestWithFallback<T>('get', endpoint);
   }
 
   async post<T>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
-    try {
-      const response = await this.api.post(endpoint, data);
-      return response.data;
-    } catch (error: any) {
-      return this.handleError(error);
-    }
+    return this.makeRequestWithFallback<T>('post', endpoint, data);
   }
 
   async put<T>(endpoint: string, data?: any): Promise<ApiResponse<T>> {
-    try {
-      const response = await this.api.put(endpoint, data);
-      return response.data;
-    } catch (error: any) {
-      return this.handleError(error);
-    }
+    return this.makeRequestWithFallback<T>('put', endpoint, data);
   }
 
   async delete<T>(endpoint: string): Promise<ApiResponse<T>> {
+    return this.makeRequestWithFallback<T>('delete', endpoint);
+  }
+
+  // Health check method for both servers
+  async checkServerHealth(): Promise<{ primary: boolean; fallback: boolean }> {
+    const results = { primary: false, fallback: false };
+    
+    // Test primary server
     try {
-      const response = await this.api.delete(endpoint);
-      return response.data;
+      const primaryResponse = await axios.get(
+        `${API_CONFIG.PROD_BASE_URL}${API_CONFIG.ENDPOINTS.HEALTH_CHECK}`,
+        { timeout: 5000 }
+      );
+      results.primary = primaryResponse.status === 200;
+      console.log('🏥 Primary server health:', results.primary);
     } catch (error: any) {
-      return this.handleError(error);
+      console.log('❌ Primary server health check failed:', error.message);
     }
+    
+    // Test fallback server (only in production)
+    if (API_CONFIG.IS_PROD) {
+      try {
+        const fallbackResponse = await axios.get(
+          `${API_CONFIG.PROD_FALLBACK_URL}${API_CONFIG.ENDPOINTS.HEALTH_CHECK}`,
+          { timeout: 5000 }
+        );
+        results.fallback = fallbackResponse.status === 200;
+        console.log('🏥 Fallback server health:', results.fallback);
+      } catch (error: any) {
+        console.log('❌ Fallback server health check failed:', error.message);
+      }
+    }
+    
+    return results;
+  }
+
+  // Method to get current server status
+  getServerStatus() {
+    return {
+      currentUrl: API_CONFIG.BASE_URL,
+      usingFallback: API_CONFIG.isUsingFallback,
+      isDev: API_CONFIG.IS_DEV,
+      primaryUrl: API_CONFIG.PROD_BASE_URL,
+      fallbackUrl: API_CONFIG.PROD_FALLBACK_URL,
+    };
+  }
+
+  // Force reset to primary server
+  resetToPrimary() {
+    API_CONFIG.resetToPrimary();
+    console.log('🔄 Manually reset to primary server');
   }
 
   // Authentication methods
@@ -184,7 +321,6 @@ async getAttendanceData(): Promise<ApiResponse> {
     return this.handleError(error);
   }
 }
-
 
 async submitWorkAttendance(attendanceData: {
   type: 'work_checkin' | 'work_checkout';
@@ -532,29 +668,18 @@ async refreshAllAttendanceData(): Promise<ApiResponse> {
 
   async mobileLoginWithPassword(idNumber: string, password: string) {
     try {
-      const response = await this.api.post('/api/auth/mobile-login', {
+      const response = await this.post('/api/auth/mobile-login', {
         id_number: idNumber,
         password: password
       });
 
       return {
         success: true,
-        data: response.data.data
+        data: response.data
       };
     } catch (error: any) {
       console.error('Mobile login with password error:', error);
-
-      if (error.response) {
-        return {
-          success: false,
-          error: error.response.data.error || 'Login failed'
-        };
-      }
-
-      return {
-        success: false,
-        error: 'Network error. Please check your connection.'
-      };
+      return this.handleError(error);
     }
   }
 
@@ -638,10 +763,16 @@ async refreshAllAttendanceData(): Promise<ApiResponse> {
   // Utility methods
   updateBaseURL(newBaseURL: string): void {
     this.api.defaults.baseURL = newBaseURL;
+    if (this.fallbackApi) {
+      this.fallbackApi.defaults.baseURL = newBaseURL;
+    }
   }
 
   setTimeout(timeout: number): void {
     this.api.defaults.timeout = timeout;
+    if (this.fallbackApi) {
+      this.fallbackApi.defaults.timeout = timeout;
+    }
   }
 
   // Health check

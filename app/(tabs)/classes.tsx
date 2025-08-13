@@ -1,4 +1,4 @@
-// app/(tabs)/classes.tsx - Enhanced Classes Screen
+// app/(tabs)/classes.tsx - Enhanced Classes Screen with Live Updates
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
@@ -97,6 +97,24 @@ export default function ClassesScreen() {
     }
   };
 
+  // Function to update specific class attendance status locally
+  const updateClassAttendanceStatus = (classId: number, attendanceData: any) => {
+    setClasses(prevClasses => 
+      prevClasses.map(classItem => {
+        if (classItem.id === classId) {
+          return {
+            ...classItem,
+            attendance_status: {
+              ...classItem.attendance_status,
+              ...attendanceData
+            }
+          };
+        }
+        return classItem;
+      })
+    );
+  };
+
   const handleClassAttendance = async (
     classId: number,
     className: string,
@@ -142,6 +160,24 @@ export default function ClassesScreen() {
       const response = await apiService.submitAttendance(attendanceData);
 
       if (response.success) {
+        // IMMEDIATE UPDATE: Update the UI immediately before showing alert
+        const currentTime = new Date().toISOString();
+        
+        if (type === 'class_checkin') {
+          updateClassAttendanceStatus(classId, {
+            checked_in: true,
+            check_in_time: currentTime,
+            status: 'In Progress'
+          });
+        } else {
+          updateClassAttendanceStatus(classId, {
+            checked_out: true,
+            check_out_time: currentTime,
+            status: 'Completed'
+          });
+        }
+
+        // Show success alert
         Alert.alert(
           'Success!',
           `Successfully ${type.replace('_', ' ')}ed for ${className}`,
@@ -149,7 +185,8 @@ export default function ClassesScreen() {
             {
               text: 'OK',
               onPress: () => {
-                loadClasses(); // Refresh data
+                // Refresh data to get server confirmation
+                loadClasses();
               },
             },
           ]
@@ -255,7 +292,7 @@ export default function ClassesScreen() {
               </Text>
             </View>
             
-            {/* Enhanced Location Status */}
+            {/* Enhanced Location Status with live update indicator */}
             <TouchableOpacity
               style={[
                 styles.locationBadge,
@@ -283,7 +320,7 @@ export default function ClassesScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Enhanced Stats Cards */}
+          {/* Enhanced Stats Cards with animated updates */}
           <View style={styles.statsContainer}>
             {[
               { key: 'active', value: stats.active, label: 'Active', color: COLORS.success, icon: 'play-circle' },
@@ -291,13 +328,13 @@ export default function ClassesScreen() {
               { key: 'notStarted', value: stats.notStarted, label: 'Pending', color: COLORS.gray[500], icon: 'time-outline' },
               { key: 'total', value: stats.total, label: 'Total', color: COLORS.text.primary, icon: 'library-outline' },
             ].map((stat, index) => (
-              <View key={stat.key} style={[styles.statCard, index === 0 && styles.statCardFirst]}>
+              <Animated.View key={stat.key} style={[styles.statCard, index === 0 && styles.statCardFirst]}>
                 <View style={styles.statIconContainer}>
                   <Ionicons name={stat.icon as any} size={20} color={stat.color} />
                 </View>
                 <Text style={[styles.statValue, { color: stat.color }]}>{stat.value}</Text>
                 <Text style={styles.statLabel}>{stat.label}</Text>
-              </View>
+              </Animated.View>
             ))}
           </View>
         </View>
@@ -359,7 +396,15 @@ export default function ClassesScreen() {
         >
           {filteredClasses.length > 0 ? (
             filteredClasses.map((classItem, index) => (
-              <View key={classItem.id} style={[styles.classCard, { marginTop: index === 0 ? 0 : LAYOUT.spacing.base }]}>
+              <Animated.View 
+                key={classItem.id} 
+                style={[
+                  styles.classCard, 
+                  { marginTop: index === 0 ? 0 : LAYOUT.spacing.base },
+                  // Add visual feedback for active classes
+                  classItem.attendance_status.checked_in && !classItem.attendance_status.checked_out && styles.activeClassCard
+                ]}
+              >
                 {/* Enhanced Class Header */}
                 <View style={styles.classHeader}>
                   <View style={styles.classMainInfo}>
@@ -446,7 +491,7 @@ export default function ClassesScreen() {
                   </View>
                 )}
 
-                {/* Enhanced Action Buttons */}
+                {/* Enhanced Action Buttons with improved disabled states */}
                 <View style={styles.actionSection}>
                   <Button
                     title={actionLoading === `class_checkin_${classItem.id}` ? "Checking In..." : "Check In"}
@@ -459,7 +504,13 @@ export default function ClassesScreen() {
                     loading={actionLoading === `class_checkin_${classItem.id}`}
                     variant="success"
                     size="small"
-                    style={StyleSheet.flatten([styles.actionButton, { flex: 1 }])}
+                    style={StyleSheet.flatten([
+                      styles.actionButton, 
+                      { 
+                        flex: 1,
+                        opacity: classItem.attendance_status.check_in_time ? 0.6 : 1
+                      }
+                    ])}
                   />
                   
                   <Button
@@ -474,10 +525,16 @@ export default function ClassesScreen() {
                     loading={actionLoading === `class_checkout_${classItem.id}`}
                     variant="error"
                     size="small"
-                    style={StyleSheet.flatten([styles.actionButton, { flex: 1 }])}
+                    style={StyleSheet.flatten([
+                      styles.actionButton, 
+                      { 
+                        flex: 1,
+                        opacity: (!classItem.attendance_status.check_in_time || classItem.attendance_status.check_out_time) ? 0.6 : 1
+                      }
+                    ])}
                   />
                 </View>
-              </View>
+              </Animated.View>
             ))
           ) : (
             <View style={styles.emptyState}>
@@ -550,7 +607,7 @@ const styles = StyleSheet.create({
   },
 
   title: {
-    fontSize: TYPOGRAPHY.fontSize['3xl'] || 30,
+    fontSize: TYPOGRAPHY.fontSize['2xl'] || 24,
     fontWeight: TYPOGRAPHY.fontWeight.bold,
     color: COLORS.text.primary,
     letterSpacing: -0.5,
@@ -713,6 +770,14 @@ const styles = StyleSheet.create({
     elevation: 4,
     borderWidth: 1,
     borderColor: COLORS.gray[100],
+  },
+
+  // New style for active classes to provide visual feedback
+  activeClassCard: {
+    borderColor: COLORS.success,
+    borderWidth: 2,
+    shadowColor: COLORS.success,
+    shadowOpacity: 0.15,
   },
 
   classHeader: {

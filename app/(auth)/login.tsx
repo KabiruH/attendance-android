@@ -14,7 +14,6 @@ import {
 } from 'react-native';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
-import { LoadingSpinner } from '../../components/ui/LoadingSpinner';
 import { COLORS, LAYOUT, TYPOGRAPHY } from '../../constants';
 import { apiService } from '../../services/ApiService';
 import { StorageService } from '../../services/StorageService';
@@ -145,7 +144,10 @@ export default function LoginScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar style="dark" />
+      <StatusBar style="light" backgroundColor={COLORS.primary} />
+      
+      {/* Background Gradient Effect */}
+      <View style={styles.backgroundGradient} />
       
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -162,75 +164,91 @@ export default function LoginScreen() {
               <View style={styles.logoPlaceholder}>
                 <Text style={styles.logoText}>📚</Text>
               </View>
+              <View style={styles.logoGlow} />
             </View>
             
-            <Text style={styles.title}>Employee Attendance</Text>
+            <Text style={styles.title}>Welcome Back</Text>
             <Text style={styles.subtitle}>
-              Sign in to mark your attendance
+              Sign in to access your attendance portal
             </Text>
           </View>
 
-          {/* Form Section */}
-          <View style={styles.form}>
-            <Input
-              label="Employee ID"
-              value={idNumber}
-              onChangeText={handleIdNumberChange}
-              placeholder="Enter your employee ID (e.g., EMP001)"
-              autoCapitalize="characters"
-              autoCorrect={false}
-              error={errors.idNumber}
-              required
-              editable={!loading}
-              returnKeyType="next"
-              style={styles.input}
-            />
-
-            <Input
-              label="Password"
-              value={password}
-              onChangeText={handlePasswordChange}
-              placeholder="Enter your password"
-              secureTextEntry
-              autoCapitalize="none"
-              autoCorrect={false}
-              error={errors.password}
-              required
-              editable={!loading}
-              returnKeyType="done"
-              onSubmitEditing={handleLogin}
-              style={styles.input}
-            />
-
-            {/* General Error Message */}
-            {errors.general ? (
-              <View style={styles.errorContainer}>
-                <Text style={styles.errorText}>{errors.general}</Text>
+          {/* Form Card */}
+          <View style={styles.formCard}>
+            <View style={styles.form}>
+              <View style={styles.inputContainer}>
+                <Input
+                  label="Employee ID"
+                  value={idNumber}
+                  onChangeText={handleIdNumberChange}
+                  placeholder="Enter your employee ID (e.g., EMP001)"
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                  error={errors.idNumber}
+                  required
+                  editable={!loading}
+                  returnKeyType="next"
+                  style={[styles.input, styles.inputField]}
+                />
               </View>
-            ) : null}
 
-            <Button
-              title="Sign In"
-              onPress={handleLogin}
-              loading={loading}
-              disabled={loading || !idNumber.trim() || !password.trim()}
-              size="large"
-              style={styles.loginButton}
-            />
+              <View style={styles.inputContainer}>
+                <Input
+                  label="Password"
+                  value={password}
+                  onChangeText={handlePasswordChange}
+                  placeholder="Enter your password"
+                  secureTextEntry
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  error={errors.password}
+                  required
+                  editable={!loading}
+                  returnKeyType="done"
+                  onSubmitEditing={handleLogin}
+                  style={[styles.input, styles.inputField]}
+                />
+              </View>
 
-            {/* Forgot Password Link */}
-            <View style={styles.forgotPasswordContainer}>
-              <Text style={styles.forgotPasswordText}>
-                Forgot your password? Contact your administrator
-              </Text>
+              {/* General Error Message */}
+              {errors.general ? (
+                <View style={styles.errorContainer}>
+                  <View style={styles.errorIcon}>
+                    <Text style={styles.errorIconText}>⚠️</Text>
+                  </View>
+                  <Text style={styles.errorText}>{errors.general}</Text>
+                </View>
+              ) : null}
+
+              <Button
+                title="Sign In"
+                onPress={handleLogin}
+                loading={loading}
+                disabled={loading || !idNumber.trim() || !password.trim()}
+                size="large"
+                style={styles.loginButton}
+              />
+
+              {/* Forgot Password Link */}
+              <View style={styles.forgotPasswordContainer}>
+                <Text style={styles.forgotPasswordText}>
+                  Forgot your password?{' '}
+                  <Text style={styles.forgotPasswordLink}>
+                    Contact Administrator
+                  </Text>
+                </Text>
+              </View>
             </View>
           </View>
 
           {/* Footer Section */}
           <View style={styles.footer}>
-            <Text style={styles.footerText}>
-              Need help? Contact IT support
-            </Text>
+            <View style={styles.helpContainer}>
+              <Text style={styles.helpIcon}>💬</Text>
+              <Text style={styles.footerText}>
+                Need help? Contact IT support
+              </Text>
+            </View>
             
             {__DEV__ && (
               <View style={styles.debugInfo}>
@@ -249,7 +267,17 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.background,
+    backgroundColor: COLORS.primary,
+  },
+  
+  backgroundGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '50%',
+    backgroundColor: COLORS.primary,
+    opacity: 0.9,
   },
   
   keyboardView: {
@@ -259,79 +287,152 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
-    padding: LAYOUT.padding.xl,
-    paddingTop: LAYOUT.padding['2xl'],
-    paddingBottom: LAYOUT.padding['2xl'],
+    padding: LAYOUT.padding.lg,
+    paddingTop: LAYOUT.padding['2xl'], // Changed from '3xl' to '2xl'
+    paddingBottom: LAYOUT.padding.xl,
   },
   
   header: {
     alignItems: 'center',
-    marginBottom: LAYOUT.spacing['3xl'],
-  },
-  
-  logoContainer: {
-    marginBottom: LAYOUT.spacing.lg,
-  },
-  
-  logoPlaceholder: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: COLORS.primary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    ...LAYOUT.shadow.lg,
-  },
-  
-  logoText: {
-    fontSize: 40,
-  },
-  
-  title: {
-    fontSize: TYPOGRAPHY.fontSize['3xl'],
-    fontWeight: TYPOGRAPHY.fontWeight.bold,
-    color: COLORS.text.primary,
-    textAlign: 'center',
-    marginBottom: LAYOUT.spacing.sm,
-  },
-  
-  subtitle: {
-    fontSize: TYPOGRAPHY.fontSize.base,
-    color: COLORS.text.secondary,
-    textAlign: 'center',
-    lineHeight: TYPOGRAPHY.lineHeight.relaxed * TYPOGRAPHY.fontSize.base,
-  },
-  
-  form: {
     marginBottom: LAYOUT.spacing['2xl'],
   },
   
+  logoContainer: {
+    marginBottom: LAYOUT.spacing.xl,
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  
+  logoPlaceholder: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: COLORS.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...LAYOUT.shadow.lg, // Changed from 'xl' to 'lg'
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    zIndex: 2,
+  },
+  
+  logoGlow: {
+    position: 'absolute',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: COLORS.background,
+    opacity: 0.2,
+    zIndex: 1,
+  },
+  
+  logoText: {
+    fontSize: 48,
+  },
+  
+  title: {
+    fontSize: TYPOGRAPHY.fontSize['2xl'], // Changed from '4xl' to '2xl'
+    fontWeight: TYPOGRAPHY.fontWeight.bold,
+    color: COLORS.background,
+    textAlign: 'center',
+    marginBottom: LAYOUT.spacing.sm,
+    textShadowColor: 'rgba(0,0,0,0.1)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+  
+  subtitle: {
+    fontSize: TYPOGRAPHY.fontSize.lg,
+    color: COLORS.background,
+    textAlign: 'center',
+    lineHeight: TYPOGRAPHY.lineHeight.relaxed * TYPOGRAPHY.fontSize.lg,
+    opacity: 0.9,
+  },
+  
+  formCard: {
+    backgroundColor: COLORS.background,
+    borderRadius: LAYOUT.borderRadius.xl,
+    marginHorizontal: LAYOUT.spacing.sm,
+    ...LAYOUT.shadow.lg, // Changed from 'xl' to 'lg'
+    elevation: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+  },
+  
+  form: {
+    padding: LAYOUT.padding.xl,
+  },
+  
+  inputContainer: {
+    marginBottom: LAYOUT.spacing.lg,
+  },
+  
   input: {
-    marginBottom: LAYOUT.spacing.base,
+    marginBottom: 0,
+  },
+  
+  inputField: {
+    backgroundColor: COLORS.gray[50],
+    borderRadius: LAYOUT.borderRadius.lg,
+    borderWidth: 1.5,
+    borderColor: COLORS.gray[200],
+    paddingHorizontal: LAYOUT.padding.lg,
+    paddingVertical: LAYOUT.padding.base,
+    // Ensure text color is visible
+    color: COLORS.text.primary,
+  },
+  
+  inputText: {
+    fontSize: TYPOGRAPHY.fontSize.base,
+    color: COLORS.text.primary,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
   },
   
   errorContainer: {
-    backgroundColor: COLORS.error + '10',
-    borderRadius: LAYOUT.borderRadius.base,
-    padding: LAYOUT.padding.base,
-    marginBottom: LAYOUT.spacing.base,
+    backgroundColor: COLORS.error + '08',
+    borderRadius: LAYOUT.borderRadius.lg,
+    padding: LAYOUT.padding.lg,
+    marginBottom: LAYOUT.spacing.lg,
     borderWidth: 1,
-    borderColor: COLORS.error + '30',
+    borderColor: COLORS.error + '20',
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  
+  errorIcon: {
+    marginRight: LAYOUT.spacing.sm,
+  },
+  
+  errorIconText: {
+    fontSize: 18,
   },
   
   errorText: {
     color: COLORS.error,
     fontSize: TYPOGRAPHY.fontSize.sm,
-    textAlign: 'center',
     lineHeight: TYPOGRAPHY.lineHeight.relaxed * TYPOGRAPHY.fontSize.sm,
+    flex: 1,
+    fontWeight: TYPOGRAPHY.fontWeight.medium,
   },
   
   loginButton: {
-    marginTop: LAYOUT.spacing.sm,
+    marginTop: LAYOUT.spacing.base,
+    borderRadius: LAYOUT.borderRadius.lg,
+    elevation: 4,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
   },
   
   forgotPasswordContainer: {
-    marginTop: LAYOUT.spacing.lg,
+    marginTop: LAYOUT.spacing.xl,
     alignItems: 'center',
   },
   
@@ -339,28 +440,50 @@ const styles = StyleSheet.create({
     fontSize: TYPOGRAPHY.fontSize.sm,
     color: COLORS.text.secondary,
     textAlign: 'center',
+    lineHeight: TYPOGRAPHY.lineHeight.relaxed * TYPOGRAPHY.fontSize.sm,
+  },
+  
+  forgotPasswordLink: {
+    color: COLORS.primary,
+    fontWeight: TYPOGRAPHY.fontWeight.semibold,
   },
   
   footer: {
     alignItems: 'center',
+    marginTop: LAYOUT.spacing.xl,
+  },
+  
+  helpContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    paddingHorizontal: LAYOUT.padding.lg,
+    paddingVertical: LAYOUT.padding.sm,
+    borderRadius: LAYOUT.borderRadius.full,
+  },
+  
+  helpIcon: {
+    fontSize: 16,
+    marginRight: LAYOUT.spacing.sm,
   },
   
   footerText: {
     fontSize: TYPOGRAPHY.fontSize.sm,
-    color: COLORS.text.secondary,
-    textAlign: 'center',
+    color: COLORS.background,
+    opacity: 0.9,
   },
   
   debugInfo: {
     marginTop: LAYOUT.spacing.lg,
-    padding: LAYOUT.padding.sm,
-    backgroundColor: COLORS.gray[100],
-    borderRadius: LAYOUT.borderRadius.sm,
+    padding: LAYOUT.padding.base,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: LAYOUT.borderRadius.base,
   },
   
   debugText: {
     fontSize: TYPOGRAPHY.fontSize.xs,
-    color: COLORS.text.secondary,
+    color: COLORS.background,
     textAlign: 'center',
+    opacity: 0.8,
   },
 });

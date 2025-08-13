@@ -126,8 +126,8 @@ export default function ProfileScreen() {
                 size="small"
                 variant="secondary"
                 onPress={() => {
-                  // Navigate to biometric setup
-                  Alert.alert('Coming Soon', 'Biometric management will be available soon.');
+                 router.replace('/(auth)/biometric-setup')
+                  
                 }}
               />
             </View>
