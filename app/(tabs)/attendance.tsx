@@ -211,7 +211,7 @@ export default function AttendanceScreen() {
         {attendanceHistory.length > 0 ? (
           attendanceHistory.map((record: any, index: number) => {
             const workHours = calculateWorkHours(record.check_in_time, record.check_out_time);
-            const isToday = new Date(record.date).toDateString() === new Date().toDateString();
+            const isToday = new Date(record.date).toDateString() == new Date().toDateString();
 
             return (
               <View
@@ -224,13 +224,7 @@ export default function AttendanceScreen() {
                 <View style={styles.cardHeader}>
                   <View>
                     <Text style={styles.dateText}>
-                      {new Date(record.date).toLocaleDateString('en-KE', {
-                        timeZone: 'Africa/Nairobi',
-                        weekday: 'short',
-                        month: 'short',
-                        day: 'numeric',
-                        year: 'numeric',
-                      })}
+                      {formatKenyaDate(record.date)}
                     </Text>
                     {isToday && (
                       <Text style={styles.todayLabel}>Today</Text>
@@ -249,11 +243,7 @@ export default function AttendanceScreen() {
                     <View style={styles.timeItem}>
                       <Ionicons name="log-in" size={16} color={COLORS.success} />
                       <Text style={styles.timeText}>
-                        {new Date(record.check_in_time).toLocaleTimeString('en-KE', {
-                          timeZone: 'Africa/Nairobi',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
+                        {formatKenyaTime(record.check_in_time)}
                       </Text>
                     </View>
                   )}
@@ -262,11 +252,7 @@ export default function AttendanceScreen() {
                     <View style={styles.timeItem}>
                       <Ionicons name="log-out" size={16} color={COLORS.error} />
                       <Text style={styles.timeText}>
-                        {new Date(record.check_out_time).toLocaleTimeString('en-KE', {
-                          timeZone: 'Africa/Nairobi',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
+                        {formatKenyaTime(record.check_out_time)}
                       </Text>
                     </View>
                   )}
