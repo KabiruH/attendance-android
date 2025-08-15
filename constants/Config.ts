@@ -1,7 +1,7 @@
 // constants/Config.ts - Version with fallback support
 export const API_CONFIG = {
   // Update this with your actual server IP/URL
-  DEV_BASE_URL: 'http://192.168.100.5:3000', // Replace with your local IP
+  DEV_BASE_URL: 'http://192.168.100.10:3000', // Replace with your local IP
   PROD_BASE_URL: 'https://attendance-project-nc7k.onrender.com',
   PROD_FALLBACK_URL: 'https://attendance.mukiria.ac.ke',
  
