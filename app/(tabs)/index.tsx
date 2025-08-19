@@ -522,7 +522,8 @@ const renderClassAttendance = () => {
               Active: {activeClassSession.class_name || 'Class Session'}
             </Text>
             <Text style={styles.activeClassTime}>
-              Since {new Date(activeClassSession.check_in_time).toLocaleTimeString('en-US', {
+              Since {new Date(activeClassSession.check_in_time).toLocaleTimeString('en-KE', {
+                timeZone: 'Africa/Nairobi',
                 hour: '2-digit',
                 minute: '2-digit',
               })}
@@ -613,7 +614,8 @@ const renderClassAttendance = () => {
                     <Ionicons name="log-in" size={14} color={COLORS.success} />
                     <Text style={styles.classTimeLabel}>In:</Text>
                     <Text style={styles.classTimeValue}>
-                      {new Date(classAttendance.check_in_time).toLocaleTimeString('en-US', {
+                      {new Date(classAttendance.check_in_time).toLocaleTimeString('en-KE', {
+                        timeZone: 'Africa/Nairobi',
                         hour: '2-digit',
                         minute: '2-digit',
                       })}
@@ -626,7 +628,8 @@ const renderClassAttendance = () => {
                     <Ionicons name="log-out" size={14} color={COLORS.error} />
                     <Text style={styles.classTimeLabel}>Out:</Text>
                     <Text style={styles.classTimeValue}>
-                      {new Date(classAttendance.check_out_time).toLocaleTimeString('en-US', {
+                      {new Date(classAttendance.check_out_time).toLocaleTimeString('en-KE', {
+                        timeZone: 'Africa/Nairobi',
                         hour: '2-digit',
                         minute: '2-digit',
                       })}
@@ -678,7 +681,7 @@ const renderClassAttendance = () => {
               Welcome back, {user?.name?.split(' ')[0] || 'Employee'}
             </Text>
             <Text style={styles.dateText}>
-              {new Date().toLocaleDateString('en-US', {
+              {new Date().toLocaleDateString('en-KE', {
                 weekday: 'long',
                 year: 'numeric',
                 month: 'long',
@@ -745,7 +748,8 @@ const renderClassAttendance = () => {
               
               {todayAttendance?.check_in_time && (
                 <Text style={styles.timeText}>
-                  {new Date(todayAttendance.check_in_time).toLocaleTimeString('en-US', {
+                  {new Date(todayAttendance.check_in_time).toLocaleTimeString('en-KE', {
+                    timeZone: 'Africa/Nairobi',
                     hour: '2-digit',
                     minute: '2-digit',
                   })}
@@ -856,7 +860,8 @@ const renderClassAttendance = () => {
                   <Ionicons name="log-in" size={14} color={COLORS.success} />
                   <Text style={styles.classTimeLabel}>In:</Text>
                   <Text style={styles.classTimeValue}>
-                    {new Date(classAttendance.check_in_time).toLocaleTimeString('en-US', {
+                    {new Date(classAttendance.check_in_time).toLocaleTimeString('en-KE', {
+                      timeZone: 'Africa/Nairobi',
                       hour: '2-digit',
                       minute: '2-digit',
                     })}
@@ -869,7 +874,8 @@ const renderClassAttendance = () => {
                   <Ionicons name="log-out" size={14} color={COLORS.error} />
                   <Text style={styles.classTimeLabel}>Out:</Text>
                   <Text style={styles.classTimeValue}>
-                    {new Date(classAttendance.check_out_time).toLocaleTimeString('en-US', {
+                    {new Date(classAttendance.check_out_time).toLocaleTimeString('en-KE', {
+                      timeZone: 'Africa/Nairobi',
                       hour: '2-digit',
                       minute: '2-digit',
                     })}

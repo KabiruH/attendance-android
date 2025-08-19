@@ -240,7 +240,8 @@ export default function ClassesScreen() {
   };
 
   const formatTime = (timeString: string) => {
-    return new Date(timeString).toLocaleTimeString('en-US', {
+    return new Date(timeString).toLocaleTimeString('en-KE', {
+      timeZone: 'Africa/Nairobi',
       hour: '2-digit',
       minute: '2-digit',
     });
